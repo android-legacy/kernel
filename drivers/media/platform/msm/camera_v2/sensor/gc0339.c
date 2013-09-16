@@ -222,6 +222,8 @@ int32_t gc0339_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_sensor_power_setting_array *power_setting_array = NULL;
 	struct msm_sensor_power_setting *power_setting = NULL;
 	struct msm_camera_sensor_board_info *data = s_ctrl->sensordata;
+	struct msm_camera_power_ctrl_t *power_info = &data->power_info;
+	struct msm_camera_gpio_conf *gpio_conf = power_info->gpio_conf;
 
 	CDBG("%s:%d\n", __func__, __LINE__);
 #ifdef CONFIG_MACH_SONY_EAGLE
@@ -229,17 +231,18 @@ int32_t gc0339_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 #else
 	power_setting_array = &s_ctrl->power_setting_array;
 #endif
-	if (data->gpio_conf->cam_gpiomux_conf_tbl != NULL) {
+
+	if (gpio_conf->cam_gpiomux_conf_tbl != NULL) {
 		pr_err("%s:%d mux install\n", __func__, __LINE__);
 		msm_gpiomux_install(
 			(struct msm_gpiomux_config *)
-			data->gpio_conf->cam_gpiomux_conf_tbl,
-			data->gpio_conf->cam_gpiomux_conf_tbl_size);
+			gpio_conf->cam_gpiomux_conf_tbl,
+			gpio_conf->cam_gpiomux_conf_tbl_size);
 	}
 
 	rc = msm_camera_request_gpio_table(
-		data->gpio_conf->cam_gpio_req_tbl,
-		data->gpio_conf->cam_gpio_req_tbl_size, 1);
+		gpio_conf->cam_gpio_req_tbl,
+		gpio_conf->cam_gpio_req_tbl_size, 1);
 	if (rc < 0) {
 		pr_err("%s: request gpio failed\n", __func__);
 		return rc;
@@ -250,20 +253,21 @@ int32_t gc0339_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 		CDBG("%s type %d\n", __func__, power_setting->seq_type);
 		switch (power_setting->seq_type) {
 		case SENSOR_CLK:
-			if (power_setting->seq_val >= s_ctrl->clk_info_size) {
+			if (power_setting->seq_val >=
+					power_info->clk_info_size) {
 				pr_err("%s clk index %d >= max %d\n", __func__,
 					power_setting->seq_val,
-					s_ctrl->clk_info_size);
+					power_info->clk_info_size);
 				goto power_up_failed;
 			}
 			if (power_setting->config_val)
-				s_ctrl->clk_info[power_setting->seq_val].
+				power_info->clk_info[power_setting->seq_val].
 					clk_rate = power_setting->config_val;
 
-			rc = msm_cam_clk_enable(s_ctrl->dev,
-				&s_ctrl->clk_info[0],
+			rc = msm_cam_clk_enable(power_info->dev,
+				&power_info->clk_info[0],
 				(struct clk **)&power_setting->data[0],
-				s_ctrl->clk_info_size,
+				power_info->clk_info_size,
 				1);
 			if (rc < 0) {
 				pr_err("%s: clk enable failed\n",
@@ -273,19 +277,19 @@ int32_t gc0339_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 			break;
 		case SENSOR_GPIO:
 			if (power_setting->seq_val >= SENSOR_GPIO_MAX ||
-				!data->gpio_conf->gpio_num_info) {
+				!gpio_conf->gpio_num_info) {
 				pr_err("%s gpio index %d >= max %d\n", __func__,
 					power_setting->seq_val,
 					SENSOR_GPIO_MAX);
 				goto power_up_failed;
 			}
 			pr_debug("%s:%d gpio set val %d\n", __func__, __LINE__,
-				data->gpio_conf->gpio_num_info->gpio_num
+				gpio_conf->gpio_num_info->gpio_num
 				[power_setting->seq_val]);
-			if (data->gpio_conf->gpio_num_info->gpio_num
+			if (gpio_conf->gpio_num_info->gpio_num
 				[power_setting->seq_val])
 				gpio_set_value_cansleep(
-					data->gpio_conf->gpio_num_info->gpio_num
+					gpio_conf->gpio_num_info->gpio_num
 					[power_setting->seq_val],
 					power_setting->config_val);
 			break;
@@ -296,8 +300,8 @@ int32_t gc0339_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 					SENSOR_GPIO_MAX);
 				goto power_up_failed;
 			}
-			msm_camera_config_single_vreg(s_ctrl->dev,
-				&data->cam_vreg[power_setting->seq_val],
+			msm_camera_config_single_vreg(power_info->dev,
+				&power_info->cam_vreg[power_setting->seq_val],
 				(struct regulator **)&power_setting->data[0],
 				1);
 			break;
@@ -352,23 +356,23 @@ power_up_failed:
 		CDBG("%s type %d\n", __func__, power_setting->seq_type);
 		switch (power_setting->seq_type) {
 		case SENSOR_CLK:
-			msm_cam_clk_enable(s_ctrl->dev,
-				&s_ctrl->clk_info[0],
+			msm_cam_clk_enable(power_info->dev,
+				&power_info->clk_info[0],
 				(struct clk **)&power_setting->data[0],
-				s_ctrl->clk_info_size,
+				power_info->clk_info_size,
 				0);
 			break;
 		case SENSOR_GPIO:
-			if (data->gpio_conf->gpio_num_info->gpio_num
+			if (gpio_conf->gpio_num_info->gpio_num
 				[power_setting->seq_val])
 				gpio_set_value_cansleep(
-					data->gpio_conf->gpio_num_info->gpio_num
+					gpio_conf->gpio_num_info->gpio_num
 					[power_setting->seq_val],
 					GPIOF_OUT_INIT_LOW);
 			break;
 		case SENSOR_VREG:
-			msm_camera_config_single_vreg(s_ctrl->dev,
-				&data->cam_vreg[power_setting->seq_val],
+			msm_camera_config_single_vreg(power_info->dev,
+				&power_info->cam_vreg[power_setting->seq_val],
 				(struct regulator **)&power_setting->data[0],
 				0);
 			break;
@@ -385,8 +389,8 @@ power_up_failed:
 		}
 	}
 	msm_camera_request_gpio_table(
-		data->gpio_conf->cam_gpio_req_tbl,
-		data->gpio_conf->cam_gpio_req_tbl_size, 0);
+		gpio_conf->cam_gpio_req_tbl,
+		gpio_conf->cam_gpio_req_tbl_size, 0);
 	return rc;
 }
 
@@ -398,6 +402,8 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_sensor_power_setting_array *power_setting_array = NULL;
 	struct msm_sensor_power_setting *power_setting = NULL;
 	struct msm_camera_sensor_board_info *data = s_ctrl->sensordata;
+	struct msm_camera_power_ctrl_t *power_info = &data->power_info;
+	struct msm_camera_gpio_conf *gpio_conf = power_info->gpio_conf;
 
 	CDBG("%s:%d\n", __func__, __LINE__);
 #ifdef CONFIG_MACH_SONY_EAGLE
@@ -429,32 +435,32 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 		switch (power_setting->seq_type) {
 		case SENSOR_CLK:
 #ifdef CONFIG_MACH_SONY_EAGLE
-			msm_cam_clk_enable(s_ctrl->dev,
-				&s_ctrl->clk_info[0],
+			msm_cam_clk_enable(power_info->dev,
+				&power_info->clk_info[0],
 				(struct clk **)&gc0339_power_on.power_setting_array.power_setting[index+1].data[0],
-				s_ctrl->clk_info_size,
+				power_info->clk_info_size,
 				0);
 #else
-			msm_cam_clk_enable(s_ctrl->dev,
-				&s_ctrl->clk_info[0],
+			msm_cam_clk_enable(power_info->dev,
+				&power_info->clk_info[0],
 				(struct clk **)&power_setting->data[0],
-				s_ctrl->clk_info_size,
+				power_info->clk_info_size,
 				0);
 #endif
 			break;
 		case SENSOR_GPIO:
 			if (power_setting->seq_val >= SENSOR_GPIO_MAX ||
-				!data->gpio_conf->gpio_num_info) {
+				!gpio_conf->gpio_num_info) {
 				pr_err("%s gpio index %d >= max %d\n", __func__,
 					power_setting->seq_val,
 					SENSOR_GPIO_MAX);
 				continue;
 			}
 #ifdef CONFIG_MACH_SONY_EAGLE
-			gpiotestnum = data->gpio_conf->gpio_num_info->gpio_num
+			gpiotestnum = gpio_conf->gpio_num_info->gpio_num
 					[power_setting->seq_val];
 #endif
-			if (data->gpio_conf->gpio_num_info->gpio_num
+			if (gpio_conf->gpio_num_info->gpio_num
 				[power_setting->seq_val])
 #ifdef CONFIG_MACH_SONY_EAGLE
 				{
@@ -464,7 +470,7 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 				else {
 #endif
 				gpio_set_value_cansleep(
-					data->gpio_conf->gpio_num_info->gpio_num
+					gpio_conf->gpio_num_info->gpio_num
 					[power_setting->seq_val],
 					GPIOF_OUT_INIT_LOW);
 #ifdef CONFIG_MACH_SONY_EAGLE
@@ -481,14 +487,14 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 				continue;
 			}
 #ifdef CONFIG_MACH_SONY_EAGLE
-			msm_camera_config_single_vreg(s_ctrl->dev,
-				&data->cam_vreg[power_setting->seq_val],
+			msm_camera_config_single_vreg(power_info->dev,
+				&power_info->cam_vreg[power_setting->seq_val],
 				(struct regulator **)&gc0339_power_on.power_setting_array.power_setting[index].data[0],
 				0);
 			break;
 #else
-			msm_camera_config_single_vreg(s_ctrl->dev,
-				&data->cam_vreg[power_setting->seq_val],
+			msm_camera_config_single_vreg(power_info->dev,
+				&power_info->cam_vreg[power_setting->seq_val],
 				(struct regulator **)&power_setting->data[0],
 				0);
 			break;
@@ -506,8 +512,8 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 		}
 	}
 	msm_camera_request_gpio_table(
-		data->gpio_conf->cam_gpio_req_tbl,
-		data->gpio_conf->cam_gpio_req_tbl_size, 0);
+		gpio_conf->cam_gpio_req_tbl,
+		gpio_conf->cam_gpio_req_tbl_size, 0);
 	CDBG("%s exit\n", __func__);
 	return 0;
 }
@@ -597,11 +603,18 @@ int32_t gc0339_config(struct msm_sensor_ctrl_t *s_ctrl,
 		for (i = 0; i < SUB_MODULE_MAX; i++)
 			CDBG("%s:%d subdev_id[%d] %d\n", __func__, __LINE__, i,
 				cdata->cfg.sensor_info.subdev_id[i]);
+		CDBG("%s:%d mount angle valid %d value %d\n", __func__,
+			__LINE__, cdata->cfg.sensor_info.is_mount_angle_valid,
+			cdata->cfg.sensor_info.sensor_mount_angle);
 
 		break;
 	case CFG_GET_SENSOR_INIT_PARAMS:
-		cdata->cfg.sensor_init_params =
-			*s_ctrl->sensordata->sensor_init_params;
+		cdata->cfg.sensor_init_params.modes_supported =
+			s_ctrl->sensordata->sensor_info->modes_supported;
+		cdata->cfg.sensor_init_params.position =
+			s_ctrl->sensordata->sensor_info->position;
+		cdata->cfg.sensor_init_params.sensor_mount_angle =
+			s_ctrl->sensordata->sensor_info->sensor_mount_angle;
 		CDBG("%s:%d init params mode %d pos %d mount %d\n", __func__,
 			__LINE__,
 			cdata->cfg.sensor_init_params.modes_supported,
@@ -650,7 +663,6 @@ int32_t gc0339_config(struct msm_sensor_ctrl_t *s_ctrl,
 			rc = -EFAULT;
 			break;
 		}
-		s_ctrl->free_power_setting = true;
 		CDBG("%s sensor id %x\n", __func__,
 			sensor_slave_info.slave_addr);
 		CDBG("%s sensor addr type %d\n", __func__,
