@@ -1229,20 +1229,20 @@ static inline int mdss_fb_create_ion_client(struct msm_fb_data_type *mfd)
 	return 0;
 }
 
-void mdss_fb_free_fb_ion_memory(struct msm_fb_data_type *mfd)
-{
-	if (!mfd) {
-		pr_err("no mfd\n");
-		return;
-	}
-
-	if (!mfd->fbi->screen_base)
-		return;
-
-	if (!mfd->fb_ion_client || !mfd->fb_ion_handle) {
-		pr_err("invalid input parameters for fb%d\n", mfd->index);
-		return;
-	}
+static struct fb_ops mdss_fb_ops = {
+	.owner = THIS_MODULE,
+	.fb_open = mdss_fb_open,
+	.fb_release = mdss_fb_release,
+	.fb_check_var = mdss_fb_check_var,	/* vinfo check */
+	.fb_set_par = mdss_fb_set_par,	/* set the video mode */
+	.fb_blank = mdss_fb_blank,	/* blank display */
+	.fb_pan_display = mdss_fb_pan_display,	/* pan display */
+	.fb_ioctl = mdss_fb_ioctl,	/* perform fb specific ioctl */
+#ifdef CONFIG_COMPAT
+	.fb_compat_ioctl = mdss_fb_compat_ioctl,
+#endif
+	.fb_mmap = mdss_fb_mmap,
+};
 
 	mfd->fbi->screen_base = NULL;
 	mfd->fbi->fix.smem_start = 0;
@@ -2868,29 +2868,6 @@ static int mdss_fb_display_commit(struct fb_info *info,
 		return ret;
 	}
 	ret = mdss_fb_pan_display_ex(info, &disp_commit);
-	return ret;
-}
-
-static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
-{
-	int ret = 0;
-
-	if (mfd->wait_for_kickoff &&
-		((cmd == MSMFB_OVERLAY_PREPARE) ||
-		(cmd == MSMFB_BUFFER_SYNC) ||
-		(cmd == MSMFB_OVERLAY_SET))) {
-		ret = mdss_fb_wait_for_kickoff(mfd);
-	} else if ((cmd != MSMFB_VSYNC_CTRL) &&
-		(cmd != MSMFB_OVERLAY_VSYNC_CTRL) &&
-		(cmd != MSMFB_ASYNC_BLIT) &&
-		(cmd != MSMFB_BLIT) &&
-		(cmd != MSMFB_NOTIFY_UPDATE) &&
-		(cmd != MSMFB_OVERLAY_PREPARE)) {
-		ret = mdss_fb_pan_idle(mfd);
-	}
-
-	if (ret)
-		pr_debug("Shutdown pending. Aborting operation %x\n", cmd);
 	return ret;
 }
 
