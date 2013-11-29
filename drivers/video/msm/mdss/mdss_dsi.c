@@ -781,6 +781,12 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata)
 		mdss_dsi_host_init(pdata);
 	}
 
+	if (pdata->panel_info.type == MIPI_VIDEO_PANEL &&
+			ctrl_pdata->off_cmds.link_state == DSI_LP_MODE) {
+		mdss_dsi_sw_reset(pdata);
+		mdss_dsi_host_init(pdata);
+	}
+
 	mdss_dsi_op_mode_config(DSI_CMD_MODE, pdata);
 
 	if (pdata->panel_info.type == MIPI_CMD_PANEL) {
