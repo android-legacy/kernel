@@ -820,44 +820,16 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.qmenu = NULL,
 	},
 	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP,
-		.name = "Enable setting initial QP",
-		.type = V4L2_CTRL_TYPE_BUTTON,
-		.minimum = 0,
-		.maximum = 0,
-		.default_value = 0,
-		.step = 0,
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE,
+		.name = "Encoder Timestamp Mode",
+		.type = V4L2_CTRL_TYPE_MENU,
+		.default_value =
+			V4L2_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE_HONOR,
+		.menu_skip_mask = ~(
+		(1 << V4L2_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE_HONOR) |
+		(1 << V4L2_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE_IGNORE)),
+		.qmenu = timestamp_mode,
 	},
-	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP,
-		.name = "Iframe initial QP",
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = 1,
-		.maximum = 51,
-		.default_value = 1,
-		.step = 1,
-		.qmenu = NULL,
-	},
-	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP,
-		.name = "Pframe initial QP",
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = 1,
-		.maximum = 51,
-		.default_value = 1,
-		.step = 1,
-		.qmenu = NULL,
-	},
-	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_B_FRAME_QP,
-		.name = "Bframe initial QP",
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = 1,
-		.maximum = 51,
-		.default_value = 1,
-		.step = 1,
-		.qmenu = NULL,
-	}
 };
 
 #define NUM_CTRLS ARRAY_SIZE(msm_venc_ctrls)
@@ -2284,6 +2256,12 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 			break;
 		}
 		pdata = &hier_p_layers;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE:
+		property_id = HAL_PARAM_VENC_DISABLE_RC_TIMESTAMP;
+		enable.enable = (ctrl->val ==
+		V4L2_MPEG_VIDC_VIDEO_RATE_CONTROL_TIMESTAMP_MODE_IGNORE);
+		pdata = &enable;
 		break;
 	default:
 		dprintk(VIDC_ERR, "Unsupported index: %x\n", ctrl->id);
