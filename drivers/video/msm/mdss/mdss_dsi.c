@@ -75,59 +75,16 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	ret = mdss_dsi_panel_reset(pdata, 0);
-	if (ret) {
-		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
-		ret = 0;
-	}
-
-	for (i = DSI_MAX_PM - 1; i >= 0; i--) {
-		/*
-		 * Core power module will be disabled when the
-		 * clocks are disabled
-		 */
-		if (DSI_CORE_PM == i)
-			continue;
-		ret = msm_dss_enable_vreg(
-			ctrl_pdata->power_data[i].vreg_config,
-			ctrl_pdata->power_data[i].num_vreg, 0);
-		if (ret)
-			pr_err("%s: failed to disable vregs for %s\n",
-				__func__, __mdss_dsi_pm_name(i));
-	}
-
-end:
-	return ret;
-}
-
-static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
-{
-	int ret = 0;
-	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
-	int i = 0;
-
-	if (pdata == NULL) {
-		pr_err("%s: Invalid input data\n", __func__);
-		return -EINVAL;
-	}
-
-	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
-				panel_data);
-
-	for (i = 0; i < DSI_MAX_PM; i++) {
-		/*
-		 * Core power module will be enabled when the
-		 * clocks are enabled
-		 */
-		if (DSI_CORE_PM == i)
-			continue;
-		ret = msm_dss_enable_vreg(
-			ctrl_pdata->power_data[i].vreg_config,
-			ctrl_pdata->power_data[i].num_vreg, 1);
-		if (ret) {
-			pr_err("%s: failed to enable vregs for %s\n",
-				__func__, __mdss_dsi_pm_name(i));
-			goto error;
+	if (enable) {
+		for (i = 0; i < DSI_MAX_PM; i++) {
+			ret = msm_dss_enable_vreg(
+				ctrl_pdata->power_data[i].vreg_config,
+				ctrl_pdata->power_data[i].num_vreg, 1);
+			if (ret) {
+				pr_err("%s: failed to enable vregs for %s\n",
+					__func__, __mdss_dsi_pm_name(i));
+				goto error_enable;
+			}
 		}
 	}
 	i--;
@@ -140,11 +97,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 			if (ret) {
 				pr_err("%s: Panel reset failed. rc=%d\n",
 						__func__, ret);
-				if (msm_dss_enable_vreg(
-				ctrl_pdata->power_data.vreg_config,
-				ctrl_pdata->power_data.num_vreg, 0))
-					pr_err("Disable vregs failed\n");
-				goto error;
+				goto error_enable;
 			}
 		}
 	} else {
@@ -157,13 +110,22 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 			pr_debug("reset disable: pinctrl not enabled\n");
 
-		ret = msm_dss_enable_vreg(
-			ctrl_pdata->power_data.vreg_config,
-			ctrl_pdata->power_data.num_vreg, 0);
-		if (ret) {
-			pr_err("%s: Failed to disable vregs.rc=%d\n",
-				__func__, ret);
+		for (i = DSI_MAX_PM - 1; i >= 0; i--) {
+			ret = msm_dss_enable_vreg(
+				ctrl_pdata->power_data[i].vreg_config,
+				ctrl_pdata->power_data[i].num_vreg, 0);
+			if (ret)
+				pr_err("%s: failed to disable vregs for %s\n",
+					__func__, __mdss_dsi_pm_name(i));
 		}
+	}
+
+error_enable:
+	if (ret) {
+		for (; i >= 0; i--)
+			msm_dss_enable_vreg(
+				ctrl_pdata->power_data[i].vreg_config,
+				ctrl_pdata->power_data[i].num_vreg, 0);
 	}
 
 error:
@@ -1465,12 +1427,14 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		pr_warn("%s: failed to get pin resources\n", __func__);
 
 	/* Parse the regulator information */
-	rc = mdss_dsi_get_dt_vreg_data(&pdev->dev,
-				       &ctrl_pdata->power_data);
-	if (rc) {
-		pr_err("%s: failed to get vreg data from dt, rc=%d\n",
-		       __func__, rc);
-		goto error_vreg;
+	for (i = 0; i < DSI_MAX_PM; i++) {
+		rc = mdss_dsi_get_dt_vreg_data(&pdev->dev,
+			&ctrl_pdata->power_data[i], i);
+		if (rc) {
+			DEV_ERR("%s: '%s' get_dt_vreg_data failed.rc=%d\n",
+				__func__, __mdss_dsi_pm_name(i), rc);
+			goto error_vreg;
+		}
 	}
 
 	/* DSI panels can be different between controllers */
@@ -1507,7 +1471,9 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 error_pan_node:
 	of_node_put(dsi_pan_node);
 error_vreg:
-	mdss_dsi_put_dt_vreg_data(&pdev->dev, &ctrl_pdata->power_data);
+	for (; i >= 0; i--)
+		mdss_dsi_put_dt_vreg_data(&pdev->dev,
+			&ctrl_pdata->power_data[i]);
 error_no_mem:
 	devm_kfree(&pdev->dev, ctrl_pdata);
 

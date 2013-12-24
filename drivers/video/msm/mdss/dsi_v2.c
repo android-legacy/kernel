@@ -180,23 +180,23 @@ static int dsi_parse_gpio(struct platform_device *pdev,
 	return 0;
 }
 
-void dsi_ctrl_config_deinit(struct platform_device *pdev,
-				struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+static void mdss_dsi_put_dt_vreg_data(struct device *dev,
+	struct dss_module_power *module_power)
 {
-	struct dss_module_power *module_power = &(ctrl_pdata->power_data);
 	if (!module_power) {
 		pr_err("%s: invalid input\n", __func__);
 		return;
 	}
 
 	if (module_power->vreg_config) {
-		devm_kfree(&(pdev->dev), module_power->vreg_config);
+		devm_kfree(dev, module_power->vreg_config);
 		module_power->vreg_config = NULL;
 	}
 	module_power->num_vreg = 0;
 }
 
-static int dsi_parse_vreg(struct device *dev, struct dss_module_power *mp)
+static int mdss_dsi_get_dt_vreg_data(struct device *dev,
+	struct dss_module_power *mp, enum dsi_pm_type module)
 {
 	int i = 0, rc = 0;
 	u32 tmp = 0;
