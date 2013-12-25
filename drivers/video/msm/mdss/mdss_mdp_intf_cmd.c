@@ -27,7 +27,7 @@
 #define KOFF_TIMEOUT msecs_to_jiffies(84)
 
 #define STOP_TIMEOUT msecs_to_jiffies(16 * (VSYNC_EXPIRE_TICK + 2))
-#define POWER_COLLAPSE_TIME msecs_to_jiffies(100)
+#define ULPS_ENTER_TIME msecs_to_jiffies(100)
 
 struct mdss_mdp_cmd_ctx {
 	struct mdss_mdp_ctl *ctl;
@@ -45,11 +45,11 @@ struct mdss_mdp_cmd_ctx {
 	spinlock_t clk_lock;
 	spinlock_t koff_lock;
 	struct work_struct clk_work;
+	struct delayed_work ulps_work;
 	struct work_struct pp_done_work;
 	atomic_t pp_done_cnt;
 	struct mdss_panel_recovery recovery;
-	struct mdss_mdp_cmd_ctx *sync_ctx;	/* for left + right, partial update */
-	u32 pp_timeout_report_cnt;
+	bool ulps;
 };
 
 struct mdss_mdp_cmd_ctx mdss_mdp_cmd_ctx_list[MAX_SESSIONS];
@@ -215,14 +215,20 @@ static inline void mdss_mdp_cmd_clk_on(struct mdss_mdp_cmd_ctx *ctx)
 	if (!ctx->clk_enabled) {
 		mdss_bus_bandwidth_ctrl(true);
 		ctx->clk_enabled = 1;
-
-		rc = mdss_iommu_ctrl(1);
-		if (IS_ERR_VALUE(rc))
-			pr_err("IOMMU attach failed\n");
-
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+		if (cancel_delayed_work_sync(&ctx->ulps_work))
+			pr_debug("deleted pending ulps work\n");
 		mdss_mdp_ctl_intf_event
 			(ctx->ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)1);
+
+		if (ctx->ulps) {
+			if (mdss_mdp_cmd_tearcheck_setup(ctx->ctl))
+				pr_warn("tearcheck setup failed\n");
+			mdss_mdp_ctl_intf_event(ctx->ctl,
+				MDSS_EVENT_DSI_ULPS_CTRL, (void *)0);
+			ctx->ulps = false;
+		}
+
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 		mdss_mdp_hist_intr_setup(&mdata->hist_intr, MDSS_IRQ_RESUME);
 	}
 	spin_lock_irqsave(&ctx->clk_lock, flags);
@@ -257,7 +263,8 @@ static inline void mdss_mdp_cmd_clk_off(struct mdss_mdp_cmd_ctx *ctx)
 			(ctx->ctl, MDSS_EVENT_PANEL_CLK_CTRL, (void *)0);
 		mdss_iommu_ctrl(0);
 		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
-		mdss_bus_bandwidth_ctrl(false);
+		if (ctx->panel_on)
+			schedule_delayed_work(&ctx->ulps_work, ULPS_ENTER_TIME);
 	}
 	mutex_unlock(&ctx->clk_mtx);
 }
@@ -400,6 +407,36 @@ static void clk_ctrl_work(struct work_struct *work)
 	}
 
 	mdss_mdp_cmd_clk_off(ctx);
+}
+
+static void __mdss_mdp_cmd_ulps_work(struct work_struct *work)
+{
+	struct delayed_work *dw = to_delayed_work(work);
+	struct mdss_mdp_cmd_ctx *ctx =
+		container_of(dw, struct mdss_mdp_cmd_ctx, ulps_work);
+
+	if (!ctx) {
+		pr_err("%s: invalid ctx\n", __func__);
+		return;
+	}
+
+	mutex_lock(&ctx->clk_mtx);
+	if (ctx->clk_enabled) {
+		mutex_unlock(&ctx->clk_mtx);
+		pr_warn("Cannot enter ulps mode if DSI clocks are on\n");
+		return;
+	}
+	mutex_unlock(&ctx->clk_mtx);
+
+	if (!ctx->panel_on) {
+		pr_err("Panel is off. skipping ULPS configuration\n");
+		return;
+	}
+
+	if (!mdss_mdp_ctl_intf_event(ctx->ctl, MDSS_EVENT_DSI_ULPS_CTRL,
+		(void *)1)) {
+		ctx->ulps = true;
+	}
 }
 
 static int mdss_mdp_cmd_add_vsync_handler(struct mdss_mdp_ctl *ctl,
@@ -809,6 +846,10 @@ static void mdss_mdp_cmd_stop_sub(struct mdss_mdp_ctl *ctl,
 	if (cancel_work_sync(&ctx->clk_work))
 		pr_debug("no pending clk work\n");
 
+	if (cancel_delayed_work_sync(&ctx->ulps_work))
+		pr_debug("deleted pending ulps work\n");
+
+	ctx->panel_on = 0;
 	mdss_mdp_cmd_clk_off(ctx);
 	flush_work(&ctx->pp_done_work);
 	mdss_mdp_cmd_tearcheck_setup(ctl, false);
@@ -841,10 +882,6 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 		WARN(ret, "intf %d unblank error (%d)\n", ctl->intf_num, ret);
 	}
 
-	if (mdss_panel_is_power_on(panel_power_state)) {
-		pr_debug("%s: cmd_off with panel always on\n", __func__);
-		goto end;
-	}
 
 	mdss_mdp_set_intr_callback(MDSS_MDP_IRQ_PING_PONG_RD_PTR, ctx->pp_num,
 				   NULL, NULL);
@@ -933,6 +970,7 @@ int mdss_mdp_cmd_start(struct mdss_mdp_ctl *ctl)
 	spin_lock_init(&ctx->koff_lock);
 	mutex_init(&ctx->clk_mtx);
 	INIT_WORK(&ctx->clk_work, clk_ctrl_work);
+	INIT_DELAYED_WORK(&ctx->ulps_work, __mdss_mdp_cmd_ulps_work);
 	INIT_WORK(&ctx->pp_done_work, pingpong_done_work);
 	atomic_set(&ctx->pp_done_cnt, 0);
 	INIT_LIST_HEAD(&ctx->vsync_handlers);

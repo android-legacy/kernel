@@ -254,9 +254,7 @@ struct mdss_dsi_ctrl_pdata {
 	int (*cmdlist_commit)(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp);
 	struct mdss_panel_data panel_data;
 	unsigned char *ctrl_base;
-	struct dss_io_data ctrl_io;
 	struct dss_io_data mmss_misc_io;
-	struct dss_io_data phy_io;
 	int reg_size;
 	u32 bus_clk_cnt;
 	u32 link_clk_cnt;
@@ -312,8 +310,6 @@ struct mdss_dsi_ctrl_pdata {
 	struct mutex cmd_mutex;
 
 	bool ulps;
-	bool core_power;
-	bool mmss_clamp;
 
 	struct dsi_buf tx_buf;
 	struct dsi_buf rx_buf;
@@ -375,9 +371,7 @@ void mdss_dsi_wait4video_done(struct mdss_dsi_ctrl_pdata *ctrl);
 int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp);
 void mdss_dsi_cmdlist_kickoff(int intf);
 int mdss_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl);
-bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type);
-void mdss_dsi_ctrl_setup(struct mdss_dsi_ctrl_pdata *ctrl);
-void mdss_dsi_dln0_phy_err(struct mdss_dsi_ctrl_pdata *ctrl);
+bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl);
 
 int mdss_dsi_panel_init(struct device_node *node,
 		struct mdss_dsi_ctrl_pdata *ctrl_pdata,
