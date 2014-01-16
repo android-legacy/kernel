@@ -2862,24 +2862,14 @@ static int __mdss_overlay_src_split_sort(struct msm_fb_data_type *mfd,
 static int __handle_overlay_prepare(struct msm_fb_data_type *mfd,
 	struct mdp_overlay_list *ovlist, struct mdp_overlay *ip_ovs)
 {
-	int ret, i;
-	int new_reqs = 0, left_cnt = 0, right_cnt = 0;
-	int num_ovs = ovlist->num_overlays;
-	u32 left_lm_w = left_lm_w_from_mfd(mfd);
-	u32 left_lm_ovs = 0, right_lm_ovs = 0;
-	bool is_single_layer = false;
-
-	struct mdss_data_type *mdata = mfd_to_mdata(mfd);
+	struct mdss_mdp_pipe *right_plist[MDSS_MDP_MAX_STAGE] = { 0 };
+	struct mdss_mdp_pipe *left_plist[MDSS_MDP_MAX_STAGE] = { 0 };
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-
-	struct mdp_overlay *sorted_ovs = NULL;
-	struct mdp_overlay *req, *prev_req;
-
-	struct mdss_mdp_pipe *pipe, *left_blend_pipe;
-	struct mdss_mdp_pipe *right_plist[MAX_PIPES_PER_LM] = { 0 };
-	struct mdss_mdp_pipe *left_plist[MAX_PIPES_PER_LM] = { 0 };
-
-	bool sort_needed = mdata->has_src_split && (num_ovs > 1);
+	struct mdss_mdp_pipe *pipe;
+	struct mdp_overlay *req;
+	int ret = 0, left_cnt = 0, right_cnt = 0;
+	int i;
+	u32 new_reqs = 0;
 
 	ret = mutex_lock_interruptible(&mdp5_data->ov_lock);
 	if (ret)
@@ -2962,8 +2952,8 @@ static int __handle_overlay_prepare(struct msm_fb_data_type *mfd,
 		if (pipe->play_cnt == 0)
 			new_reqs |= pipe->ndx;
 
-		if (IS_RIGHT_MIXER_OV(pipe->flags, pipe->dst.x, left_lm_w)) {
-			if (right_cnt >= MAX_PIPES_PER_LM) {
+		if (pipe->flags & MDSS_MDP_RIGHT_MIXER) {
+			if (right_cnt >= MDSS_MDP_MAX_STAGE) {
 				pr_err("too many pipes on right mixer\n");
 				ret = -EINVAL;
 				goto validate_exit;
@@ -2971,7 +2961,7 @@ static int __handle_overlay_prepare(struct msm_fb_data_type *mfd,
 			right_plist[right_cnt] = pipe;
 			right_cnt++;
 		} else {
-			if (left_cnt >= MAX_PIPES_PER_LM) {
+			if (left_cnt >= MDSS_MDP_MAX_STAGE) {
 				pr_err("too many pipes on left mixer\n");
 				ret = -EINVAL;
 				goto validate_exit;
