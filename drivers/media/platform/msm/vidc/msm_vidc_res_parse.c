@@ -12,6 +12,7 @@
  */
 
 #include <linux/of.h>
+#include <linux/slab.h>
 #include <mach/board.h>
 #include "msm_vidc_resources.h"
 #include "msm_vidc_debug.h"
@@ -650,7 +651,7 @@ int read_platform_resources_from_dt(
 		return -ENOENT;
 	}
 
-	res->fw_base_addr = 0x0;
+	res->firmware_base = 0x0;
 
 	kres = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	res->register_base = kres ? kres->start : -1;
@@ -745,7 +746,7 @@ int read_platform_resources_from_board(
 		return -ENOENT;
 	}
 
-	res->fw_base_addr = 0x0;
+	res->firmware_base = 0x0;
 
 	kres = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	res->register_base = kres ? kres->start : -1;

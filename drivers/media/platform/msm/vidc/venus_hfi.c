@@ -19,14 +19,13 @@
 #include <linux/of.h>
 #include <linux/iommu.h>
 #include <linux/qcom_iommu.h>
-#include <soc/qcom/subsystem_restart.h>
-#include <soc/qcom/scm.h>
-#include <linux/msm_iommu_domains.h>
-#include <soc/qcom/ocmem.h>
-#include <soc/qcom/smem.h>
-#include <asm/memory.h>
+#include <linux/regulator/consumer.h>
 #include <linux/iopoll.h>
 #include <linux/coresight-stm.h>
+#include <soc/qcom/subsystem_restart.h>
+#include <soc/qcom/scm.h>
+#include <soc/qcom/smem.h>
+#include <asm/memory.h>
 #include "hfi_packetization.h"
 #include "venus_hfi.h"
 #include "vidc_hfi_io.h"
@@ -129,10 +128,12 @@ static void venus_hfi_sim_modify_cmd_packet(u8 *packet)
 	if (!packet) {
 		dprintk(VIDC_ERR, "Invalid Param\n");
 		return;
+	} else if (HFI_SIM_FW_BIAS == 0) {
+		return;
 	}
 
 	sys_init = (struct hfi_cmd_sys_session_init_packet *)packet;
-	sess = (struct hal_session *) sys_init->session_id;
+	sess = (struct hal_session *) (unsigned long)sys_init->session_id;
 	switch (sys_init->packet_type) {
 	case HFI_CMD_SESSION_EMPTY_BUFFER:
 		if (sess->is_decoder) {
@@ -166,7 +167,8 @@ static void venus_hfi_sim_modify_cmd_packet(u8 *packet)
 			struct hfi_buffer_info *buff;
 			buff = (struct hfi_buffer_info *) pkt->rg_buffer_info;
 			buff->buffer_addr -= HFI_SIM_FW_BIAS;
-			buff->extra_data_addr -= HFI_SIM_FW_BIAS;
+			if (buff->extra_data_addr >= HFI_SIM_FW_BIAS)
+				buff->extra_data_addr -= HFI_SIM_FW_BIAS;
 		} else {
 			for (i = 0; i < pkt->num_buffers; i++)
 				pkt->rg_buffer_info[i] -= HFI_SIM_FW_BIAS;
@@ -332,6 +334,7 @@ static int venus_hfi_write_queue(void *info, u8 *packet, u32 *rx_req_is_set)
 	new_write_idx = (queue->qhdr_write_idx + packet_size_in_words);
 	write_ptr = (u32 *)((qinfo->q_array.align_virtual_addr) +
 		(queue->qhdr_write_idx << 2));
+	dprintk(VIDC_DBG, "Write Ptr: %d\n", new_write_idx);
 	if (new_write_idx < queue->qhdr_q_size) {
 		memcpy(write_ptr, packet, packet_size_in_words << 2);
 	} else {
@@ -361,10 +364,12 @@ static void venus_hfi_hal_sim_modify_msg_packet(u8 *packet)
 	if (!packet) {
 		dprintk(VIDC_ERR, "Invalid Param\n");
 		return;
+	} else if (HFI_SIM_FW_BIAS == 0) {
+		return;
 	}
 
 	sys_idle = (struct hfi_msg_sys_session_init_done_packet *)packet;
-	sess = (struct hal_session *) sys_idle->session_id;
+	sess = (struct hal_session *) (unsigned long)sys_idle->session_id;
 
 	switch (sys_idle->packet_type) {
 	case HFI_MSG_SESSION_FILL_BUFFER_DONE:
@@ -466,7 +471,7 @@ static int venus_hfi_read_queue(void *info, u8 *packet, u32 *pb_tx_req_is_set)
 	}
 
 	new_read_idx = queue->qhdr_read_idx + packet_size_in_words;
-	dprintk(VIDC_DBG, "Read Ptr: %d\n", (u32) new_read_idx);
+	dprintk(VIDC_DBG, "Read Ptr: %d\n", new_read_idx);
 	if (((packet_size_in_words << 2) <= VIDC_IFACEQ_VAR_HUGE_PKT_SIZE)
 			&& queue->qhdr_read_idx <= queue->qhdr_q_size) {
 		if (new_read_idx < queue->qhdr_q_size) {
@@ -541,8 +546,8 @@ static int venus_hfi_alloc(struct venus_hfi_device *dev, void *mem,
 	}
 	vmem->mem_size = alloc->size;
 	vmem->mem_data = alloc;
-	vmem->align_virtual_addr = (u8 *) alloc->kvaddr;
-	vmem->align_device_addr = (u8 *)alloc->device_addr;
+	vmem->align_virtual_addr = alloc->kvaddr;
+	vmem->align_device_addr = alloc->device_addr;
 	return rc;
 fail_smem_alloc:
 	return rc;
@@ -570,13 +575,12 @@ static void venus_hfi_write_register(struct venus_hfi_device *device, u32 reg,
 		dprintk(VIDC_ERR, "Invalid params: %p\n", device);
 		return;
 	}
-
-	base_addr = device->hal_data->register_base_addr;
-	if (device->clk_state != ENABLED_PREPARED) {
+	if (!device->clocks_enabled) {
 		dprintk(VIDC_WARN,
 			"HFI Write register failed : Clocks are OFF\n");
 		return;
 	}
+
 	reg &= REG_ADDR_OFFSET_BITMASK;
 	if (reg == (u32)VIDC_CPU_CS_SCIACMDARG2) {
 		/* workaround to offset of FW bias */
@@ -595,29 +599,30 @@ static void venus_hfi_write_register(struct venus_hfi_device *device, u32 reg,
 		value -= HFI_SIM_FW_BIAS;
 	}
 
-	hwiosymaddr = ((u32)base_addr + (hwiosymaddr));
-	dprintk(VIDC_DBG, "Base addr: 0x%x, written to: 0x%x, Value: 0x%x...\n",
-			(u32)base_addr, hwiosymaddr, value);
-	writel_relaxed(value, hwiosymaddr);
+	base_addr = device->hal_data->register_base_addr;
+	dprintk(VIDC_DBG, "Base addr: 0x%p, written to: 0x%x, Value: 0x%x...\n",
+		base_addr, hwiosymaddr, value);
+	base_addr += hwiosymaddr;
+	writel_relaxed(value, base_addr);
 	wmb();
 }
 
 static int venus_hfi_read_register(struct venus_hfi_device *device, u32 reg)
 {
-	int rc ;
+	int rc = 0;
 	u8 *base_addr;
 	if (!device) {
 		dprintk(VIDC_ERR, "Invalid params: %p\n", device);
 		return -EINVAL;
 	}
-
-	base_addr = device->hal_data->register_base_addr;
-	if (device->clk_state != ENABLED_PREPARED) {
+	if (!device->clocks_enabled) {
 		dprintk(VIDC_WARN,
 			"HFI Read register failed : Clocks are OFF\n");
 		return -EINVAL;
 	}
-	rc = readl_relaxed((u32)base_addr + reg);
+	base_addr = device->hal_data->register_base_addr;
+
+	rc = readl_relaxed(base_addr + reg);
 	rmb();
 	dprintk(VIDC_DBG, "Base addr: 0x%p, read from: 0x%x, value: 0x%x...\n",
 		base_addr, reg, rc);
@@ -1096,7 +1101,8 @@ static int venus_hfi_halt_axi(struct venus_hfi_device *device)
 	venus_hfi_write_register(device, VENUS_VBIF_AXI_HALT_CTRL0, reg, 0);
 
 	/* Request for AXI bus port halt */
-	rc = readl_poll_timeout((u32)device->hal_data->register_base_addr
+	rc = readl_poll_timeout(
+			(unsigned long)device->hal_data->register_base_addr
 			+ VENUS_VBIF_AXI_HALT_CTRL1,
 			reg, reg & VENUS_VBIF_AXI_HALT_CTRL1_HALT_ACK,
 			POLL_INTERVAL_US,
@@ -1232,10 +1238,10 @@ static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 		(u32)device->iface_q_table.align_device_addr,
 		device->iface_q_table.align_virtual_addr);
 
-	if (!IS_ERR_OR_NULL(device->sfr.align_device_addr))
+	if (device->sfr.align_device_addr)
 		venus_hfi_write_register(device, VIDC_SFR_ADDR,
 				(u32)device->sfr.align_device_addr, 0);
-	if (!IS_ERR_OR_NULL(device->qdss.align_device_addr))
+	if (device->qdss.align_device_addr)
 		venus_hfi_write_register(device, VIDC_MMAP_ADDR,
 				(u32)device->qdss.align_device_addr, 0);
 
@@ -1512,6 +1518,7 @@ static void venus_hfi_interface_queues_release(struct venus_hfi_device *device)
 	struct hfi_mem_map *mem_map;
 	int num_entries = sizeof(venus_qdss_entries)/(2 * sizeof(u32));
 	int domain, partition;
+	unsigned long mem_map_table_base_addr;
 
 	mutex_lock(&device->write_lock);
 	mutex_lock(&device->read_lock);
@@ -1519,9 +1526,17 @@ static void venus_hfi_interface_queues_release(struct venus_hfi_device *device)
 		qdss = (struct hfi_mem_map_table *)
 			device->qdss.align_virtual_addr;
 		qdss->mem_map_num_entries = num_entries;
+		mem_map_table_base_addr =
+			device->qdss.align_device_addr +
+			sizeof(struct hfi_mem_map_table);
 		qdss->mem_map_table_base_addr =
-			(u32 *)((u32)device->qdss.align_device_addr +
-				sizeof(struct hfi_mem_map_table));
+			(u32)mem_map_table_base_addr;
+		if ((unsigned long)qdss->mem_map_table_base_addr !=
+			mem_map_table_base_addr) {
+			dprintk(VIDC_ERR,
+				"Invalid mem_map_table_base_addr 0x%lx",
+				mem_map_table_base_addr);
+		}
 		mem_map = (struct hfi_mem_map *)(qdss + 1);
 		msm_smem_get_domain_partition(device->hal_client, 0,
 			HAL_BUFFER_INTERNAL_CMD_QUEUE, &domain, &partition);
@@ -1539,23 +1554,23 @@ static void venus_hfi_interface_queues_release(struct venus_hfi_device *device)
 		device->iface_queues[i].q_hdr = NULL;
 		device->iface_queues[i].q_array.mem_data = NULL;
 		device->iface_queues[i].q_array.align_virtual_addr = NULL;
-		device->iface_queues[i].q_array.align_device_addr = NULL;
+		device->iface_queues[i].q_array.align_device_addr = 0;
 	}
 	device->iface_q_table.mem_data = NULL;
 	device->iface_q_table.align_virtual_addr = NULL;
-	device->iface_q_table.align_device_addr = NULL;
+	device->iface_q_table.align_device_addr = 0;
 
 	device->qdss.mem_data = NULL;
 	device->qdss.align_virtual_addr = NULL;
-	device->qdss.align_device_addr = NULL;
+	device->qdss.align_device_addr = 0;
 
 	device->sfr.mem_data = NULL;
 	device->sfr.align_virtual_addr = NULL;
-	device->sfr.align_device_addr = NULL;
+	device->sfr.align_device_addr = 0;
 
 	device->mem_addr.mem_data = NULL;
 	device->mem_addr.align_virtual_addr = NULL;
-	device->mem_addr.align_device_addr = NULL;
+	device->mem_addr.align_device_addr = 0;
 
 	msm_smem_delete_client(device->hal_client);
 	device->hal_client = NULL;
@@ -1567,7 +1582,7 @@ static int venus_hfi_get_qdss_iommu_virtual_addr(struct hfi_mem_map *mem_map,
 {
 	int i;
 	int rc = 0;
-	dma_addr_t iova = 0;
+	ion_phys_addr_t iova = 0;
 	int num_entries = sizeof(venus_qdss_entries)/(2 * sizeof(u32));
 
 	for (i = 0; i < num_entries; i++) {
@@ -1602,7 +1617,7 @@ static int venus_hfi_interface_queues_init(struct venus_hfi_device *dev)
 {
 	struct hfi_queue_table_header *q_tbl_hdr;
 	struct hfi_queue_header *q_hdr;
-	u8 i;
+	u32 i;
 	int rc = 0;
 	struct hfi_mem_map_table *qdss;
 	struct hfi_mem_map *mem_map;
@@ -1612,6 +1627,9 @@ static int venus_hfi_interface_queues_init(struct venus_hfi_device *dev)
 	int offset = 0;
 	int num_entries = sizeof(venus_qdss_entries)/(2 * sizeof(u32));
 	int domain, partition;
+	u32 value = 0;
+	unsigned long mem_map_table_base_addr;
+
 	mem_addr = &dev->mem_addr;
 	rc = venus_hfi_alloc(dev, (void *) mem_addr,
 			QUEUE_SIZE, 1, 0,
@@ -1646,7 +1664,7 @@ static int venus_hfi_interface_queues_init(struct venus_hfi_device *dev)
 		if (rc) {
 			dprintk(VIDC_WARN,
 				"qdss_alloc_fail: QDSS messages logging will not work\n");
-			dev->qdss.align_device_addr = NULL;
+			dev->qdss.align_device_addr = 0;
 		} else {
 			dev->qdss.align_device_addr =
 				mem_addr->align_device_addr;
@@ -1661,7 +1679,7 @@ static int venus_hfi_interface_queues_init(struct venus_hfi_device *dev)
 			HAL_BUFFER_INTERNAL_CMD_QUEUE);
 	if (rc) {
 		dprintk(VIDC_WARN, "sfr_alloc_fail: SFR not will work\n");
-		dev->sfr.align_device_addr = NULL;
+		dev->sfr.align_device_addr = 0;
 	} else {
 		dev->sfr.align_device_addr = mem_addr->align_device_addr;
 		dev->sfr.align_virtual_addr = mem_addr->align_virtual_addr;
@@ -1681,74 +1699,99 @@ static int venus_hfi_interface_queues_init(struct venus_hfi_device *dev)
 
 	iface_q = &dev->iface_queues[VIDC_IFACEQ_CMDQ_IDX];
 	q_hdr = iface_q->q_hdr;
-	q_hdr->qhdr_start_addr = (u32)
-		iface_q->q_array.align_device_addr;
+	q_hdr->qhdr_start_addr = (u32)iface_q->q_array.align_device_addr;
 	q_hdr->qhdr_type |= HFI_Q_ID_HOST_TO_CTRL_CMD_Q;
+	if ((ion_phys_addr_t)q_hdr->qhdr_start_addr !=
+		iface_q->q_array.align_device_addr) {
+		dprintk(VIDC_ERR, "Invalid CMDQ device address (0x%pa)",
+			&iface_q->q_array.align_device_addr);
+	}
 
 	iface_q = &dev->iface_queues[VIDC_IFACEQ_MSGQ_IDX];
 	q_hdr = iface_q->q_hdr;
-	q_hdr->qhdr_start_addr = (u32)
-		iface_q->q_array.align_device_addr;
+	q_hdr->qhdr_start_addr = (u32)iface_q->q_array.align_device_addr;
 	q_hdr->qhdr_type |= HFI_Q_ID_CTRL_TO_HOST_MSG_Q;
+	if ((ion_phys_addr_t)q_hdr->qhdr_start_addr !=
+		iface_q->q_array.align_device_addr) {
+		dprintk(VIDC_ERR, "Invalid MSGQ device address (0x%pa)",
+			&iface_q->q_array.align_device_addr);
+	}
 
 	iface_q = &dev->iface_queues[VIDC_IFACEQ_DBGQ_IDX];
 	q_hdr = iface_q->q_hdr;
-	q_hdr->qhdr_start_addr = (u32)
-		iface_q->q_array.align_device_addr;
+	q_hdr->qhdr_start_addr = (u32)iface_q->q_array.align_device_addr;
 	q_hdr->qhdr_type |= HFI_Q_ID_CTRL_TO_HOST_DEBUG_Q;
-
-	/*
-	 * Set receive request to zero on debug queue as there is no
-	 * need of interrupt from video hardware for debug messages
-	 */
-	q_hdr->qhdr_rx_req = 0;
-	if (q_hdr->qhdr_start_addr != (ion_phys_addr_t)
+	if ((ion_phys_addr_t)q_hdr->qhdr_start_addr !=
 		iface_q->q_array.align_device_addr) {
 		dprintk(VIDC_ERR, "Invalid DBGQ device address (0x%pa)",
 			&iface_q->q_array.align_device_addr);
 	}
 
+	value = (u32)dev->iface_q_table.align_device_addr;
+	if ((ion_phys_addr_t)value !=
+		dev->iface_q_table.align_device_addr) {
+		dprintk(VIDC_ERR,
+			"Invalid iface_q_table device address (0x%pa)",
+			&dev->iface_q_table.align_device_addr);
+	}
 	venus_hfi_write_register(dev,
-			VIDC_UC_REGION_ADDR,
-			(u32) dev->iface_q_table.align_device_addr, 0);
+			VIDC_UC_REGION_ADDR, value, 0);
 	venus_hfi_write_register(dev,
 			VIDC_UC_REGION_SIZE, SHARED_QSIZE, 0);
 	venus_hfi_write_register(dev,
-		VIDC_CPU_CS_SCIACMDARG2,
-		(u32) dev->iface_q_table.align_device_addr,
+		VIDC_CPU_CS_SCIACMDARG2, value,
 		dev->iface_q_table.align_virtual_addr);
 	venus_hfi_write_register(dev,
 		VIDC_CPU_CS_SCIACMDARG1, 0x01,
 		dev->iface_q_table.align_virtual_addr);
 
 	if (dev->qdss.mem_data) {
-		qdss = (struct hfi_mem_map_table *)
-			dev->qdss.align_virtual_addr;
+		qdss = (struct hfi_mem_map_table *)dev->qdss.align_virtual_addr;
 		qdss->mem_map_num_entries = num_entries;
+		mem_map_table_base_addr = dev->qdss.align_device_addr +
+			sizeof(struct hfi_mem_map_table);
 		qdss->mem_map_table_base_addr =
-			(u32 *)	((u32)dev->qdss.align_device_addr +
-			sizeof(struct hfi_mem_map_table));
+			(u32)mem_map_table_base_addr;
+		if ((ion_phys_addr_t)qdss->mem_map_table_base_addr !=
+				mem_map_table_base_addr) {
+			dprintk(VIDC_ERR,
+					"Invalid mem_map_table_base_addr (0x%lx)",
+					mem_map_table_base_addr);
+		}
 		mem_map = (struct hfi_mem_map *)(qdss + 1);
 		msm_smem_get_domain_partition(dev->hal_client, 0,
-			HAL_BUFFER_INTERNAL_CMD_QUEUE, &domain, &partition);
-		rc = venus_hfi_get_qdss_iommu_virtual_addr(mem_map,
-			domain, partition);
+				HAL_BUFFER_INTERNAL_CMD_QUEUE,
+				&domain, &partition);
+		rc = venus_hfi_get_qdss_iommu_virtual_addr(
+				mem_map, domain, partition);
 		if (rc) {
 			dprintk(VIDC_ERR,
-				"IOMMU mapping failed, Freeing qdss memdata\n");
+					"IOMMU mapping failed, Freeing qdss memdata\n");
 			venus_hfi_free(dev, dev->qdss.mem_data);
 			dev->qdss.mem_data = NULL;
 		}
-		if (!IS_ERR_OR_NULL(dev->qdss.align_device_addr))
+		value = (u32)dev->qdss.align_device_addr;
+		if ((ion_phys_addr_t)value !=
+				dev->qdss.align_device_addr) {
+			dprintk(VIDC_ERR, "Invalid qdss device address (0x%pa)",
+					&dev->qdss.align_device_addr);
+		}
+		if (dev->qdss.align_device_addr)
 			venus_hfi_write_register(dev,
-				VIDC_MMAP_ADDR,
-				(u32) dev->qdss.align_device_addr, 0);
+					VIDC_MMAP_ADDR, value, 0);
 	}
+
 	vsfr = (struct hfi_sfr_struct *) dev->sfr.align_virtual_addr;
 	vsfr->bufSize = SFR_SIZE;
-	if (!IS_ERR_OR_NULL(dev->sfr.align_device_addr))
+	value = (u32)dev->sfr.align_device_addr;
+	if ((ion_phys_addr_t)value !=
+		dev->sfr.align_device_addr) {
+		dprintk(VIDC_ERR, "Invalid sfr device address (0x%pa)",
+			&dev->sfr.align_device_addr);
+	}
+	if (dev->sfr.align_device_addr)
 		venus_hfi_write_register(dev,
-			VIDC_SFR_ADDR, (u32)dev->sfr.align_device_addr , 0);
+			VIDC_SFR_ADDR, value , 0);
 	return 0;
 fail_alloc_queue:
 	return -ENOMEM;
@@ -1860,9 +1903,9 @@ static int venus_hfi_core_init(void *device)
 			goto err_core_init;
 		}
 
-		dprintk(VIDC_DBG, "Dev_Virt: 0x%x, Reg_Virt: 0x%x\n",
-		dev->hal_data->device_base_addr,
-		(u32) dev->hal_data->register_base_addr);
+		dprintk(VIDC_DBG, "Dev_Virt: 0x%pa, Reg_Virt: 0x%p\n",
+			&dev->hal_data->firmware_base_addr,
+			dev->hal_data->register_base_addr);
 
 		rc = venus_hfi_interface_queues_init(dev);
 		if (rc) {
@@ -1994,13 +2037,13 @@ static void venus_hfi_core_clear_interrupt(struct venus_hfi_device *device)
 		device->intr_status |= intr_status;
 		device->reg_count++;
 		dprintk(VIDC_DBG,
-				"INTERRUPT for device: 0x%x: times: %d interrupt_status: %d\n",
-				(u32)device, device->reg_count, intr_status);
+			"INTERRUPT for device: 0x%p: times: %d interrupt_status: %d\n",
+			device, device->reg_count, intr_status);
 	} else {
 		device->spur_count++;
 		dprintk(VIDC_INFO,
-				"SPURIOUS_INTR for device: 0x%x: times: %d interrupt_status: %d\n",
-				(u32)device, device->spur_count, intr_status);
+			"SPURIOUS_INTR for device: 0x%p: times: %d interrupt_status: %d\n",
+			device, device->spur_count, intr_status);
 	}
 
 	venus_hfi_write_register(device,
@@ -2081,8 +2124,8 @@ static int venus_hfi_session_set_property(void *sess,
 
 	dprintk(VIDC_INFO, "in set_prop,with prop id: 0x%x\n", ptype);
 
-	if (create_pkt_cmd_session_set_property(pkt, (u32)session, ptype,
-				pdata)) {
+	if (create_pkt_cmd_session_set_property(pkt,
+				(u32)(unsigned long)session, ptype, pdata)) {
 		dprintk(VIDC_ERR, "set property: failed to create packet\n");
 		return -EINVAL;
 	}
@@ -2108,7 +2151,7 @@ static int venus_hfi_session_get_property(void *sess,
 	dprintk(VIDC_INFO, "%s: property id: %d\n", __func__, ptype);
 
 	rc = create_pkt_cmd_session_get_property(
-					&pkt, (u32)session, ptype);
+				&pkt, (u32)(unsigned long)session, ptype);
 	if (rc) {
 		dprintk(VIDC_ERR, "get property profile: pkt failed\n");
 		goto err_create_pkt;
@@ -2153,7 +2196,7 @@ static void *venus_hfi_session_init(void *device, u32 session_id,
 		dprintk(VIDC_ERR, "new session fail: Out of memory\n");
 		return NULL;
 	}
-	new_session->session_id = (u32) session_id;
+	new_session->session_id = session_id;
 	if (session_type == 1)
 		new_session->is_decoder = 0;
 	else if (session_type == 2)
@@ -2166,8 +2209,8 @@ static void *venus_hfi_session_init(void *device, u32 session_id,
 
 	venus_hfi_set_default_sys_properties(device);
 
-	if (create_pkt_cmd_sys_session_init(&pkt, (u32)new_session,
-			session_type, codec_type)) {
+	if (create_pkt_cmd_sys_session_init(&pkt,
+		(u32)(unsigned long)new_session, session_type, codec_type)) {
 		dprintk(VIDC_ERR, "session_init: failed to create packet\n");
 		goto err_session_init_fail;
 	}
@@ -2195,7 +2238,8 @@ static int venus_hfi_send_session_cmd(void *session_id,
 		return -ENODEV;
 	}
 
-	rc = create_pkt_cmd_session_cmd(&pkt, pkt_type, (u32)session);
+	rc = create_pkt_cmd_session_cmd(&pkt, pkt_type,
+						(u32)(unsigned long)session);
 	if (rc) {
 		dprintk(VIDC_ERR, "send session cmd: create pkt failed\n");
 		goto err_create_pkt;
@@ -2271,7 +2315,7 @@ static int venus_hfi_session_set_buffers(void *sess,
 	pkt = (struct hfi_cmd_session_set_buffers_packet *)packet;
 
 	rc = create_pkt_cmd_session_set_buffers(pkt,
-			(u32)session, buffer_info);
+			(u32)(unsigned long)session, buffer_info);
 	if (rc) {
 		dprintk(VIDC_ERR, "set buffers: failed to create packet\n");
 		goto err_create_pkt;
@@ -2305,7 +2349,7 @@ static int venus_hfi_session_release_buffers(void *sess,
 	pkt = (struct hfi_cmd_session_release_buffer_packet *) packet;
 
 	rc = create_pkt_cmd_session_release_buffers(pkt,
-					(u32)session, buffer_info);
+				(u32)(unsigned long)session, buffer_info);
 	if (rc) {
 		dprintk(VIDC_ERR, "release buffers: failed to create packet\n");
 		goto err_create_pkt;
@@ -2371,7 +2415,7 @@ static int venus_hfi_session_etb(void *sess,
 		struct hfi_cmd_session_empty_buffer_compressed_packet pkt;
 
 		rc = create_pkt_cmd_session_etb_decoder(&pkt,
-					(u32)session, input_frame);
+				(u32)(unsigned long)session, input_frame);
 		if (rc) {
 			dprintk(VIDC_ERR,
 			"Session etb decoder: failed to create pkt\n");
@@ -2385,7 +2429,7 @@ static int venus_hfi_session_etb(void *sess,
 			pkt;
 
 		rc =  create_pkt_cmd_session_etb_encoder(&pkt,
-					(u32)session, input_frame);
+				(u32)(unsigned long)session, input_frame);
 		if (rc) {
 			dprintk(VIDC_ERR,
 			"Session etb encoder: failed to create pkt\n");
@@ -2413,7 +2457,8 @@ static int venus_hfi_session_ftb(void *sess,
 		session = sess;
 	}
 
-	rc = create_pkt_cmd_session_ftb(&pkt, (u32)session, output_frame);
+	rc = create_pkt_cmd_session_ftb(&pkt,
+				(u32)(unsigned long)session, output_frame);
 	if (rc) {
 		dprintk(VIDC_ERR, "Session ftb: failed to create pkt\n");
 		goto err_create_pkt;
@@ -2442,8 +2487,8 @@ static int venus_hfi_session_parse_seq_hdr(void *sess,
 
 	pkt = (struct hfi_cmd_session_parse_sequence_header_packet *) packet;
 
-	rc = create_pkt_cmd_session_parse_seq_header(pkt, (u32)session,
-							seq_hdr);
+	rc = create_pkt_cmd_session_parse_seq_header(pkt,
+				(u32)(unsigned long)session, seq_hdr);
 	if (rc) {
 		dprintk(VIDC_ERR,
 		"Session parse seq hdr: failed to create pkt\n");
@@ -2472,7 +2517,8 @@ static int venus_hfi_session_get_seq_hdr(void *sess,
 	}
 
 	pkt = (struct hfi_cmd_session_get_sequence_header_packet *) packet;
-	rc = create_pkt_cmd_session_get_seq_hdr(pkt, (u32)session, seq_hdr);
+	rc = create_pkt_cmd_session_get_seq_hdr(pkt,
+					(u32)(unsigned long)session, seq_hdr);
 	if (rc) {
 		dprintk(VIDC_ERR,
 				"Session get seq hdr: failed to create pkt\n");
@@ -2498,7 +2544,8 @@ static int venus_hfi_session_get_buf_req(void *sess)
 		return -ENODEV;
 	}
 
-	rc = create_pkt_cmd_session_get_buf_req(&pkt, (u32)session);
+	rc = create_pkt_cmd_session_get_buf_req(&pkt,
+					(u32)(unsigned long)session);
 	if (rc) {
 		dprintk(VIDC_ERR,
 				"Session get buf req: failed to create pkt\n");
@@ -2524,7 +2571,8 @@ static int venus_hfi_session_flush(void *sess, enum hal_flush flush_mode)
 		return -ENODEV;
 	}
 
-	rc = create_pkt_cmd_session_flush(&pkt, (u32)session, flush_mode);
+	rc = create_pkt_cmd_session_flush(&pkt,
+				(u32)(unsigned long)session, flush_mode);
 	if (rc) {
 		dprintk(VIDC_ERR, "Session flush: failed to create pkt\n");
 		goto err_create_pkt;
@@ -2537,8 +2585,8 @@ err_create_pkt:
 }
 
 static int venus_hfi_check_core_registered(
-	struct hal_device_data core, u32 fw_addr,
-	u32 reg_addr, u32 reg_size, u32 irq)
+	struct hal_device_data core, phys_addr_t fw_addr,
+	u8 *reg_addr, u32 reg_size, phys_addr_t irq)
 {
 	struct venus_hfi_device *device;
 	struct list_head *curr, *next;
@@ -2549,30 +2597,30 @@ static int venus_hfi_check_core_registered(
 				struct venus_hfi_device, list);
 			if (device && device->hal_data->irq == irq &&
 				(CONTAINS(device->hal_data->
-						device_base_addr,
+						firmware_base_addr,
 						FIRMWARE_SIZE, fw_addr) ||
 				CONTAINS(fw_addr, FIRMWARE_SIZE,
 						device->hal_data->
-						device_base_addr) ||
-				CONTAINS((u32)device->hal_data->
+						firmware_base_addr) ||
+				CONTAINS(device->hal_data->
 						register_base_addr,
 						reg_size, reg_addr) ||
 				CONTAINS(reg_addr, reg_size,
-						(u32)device->hal_data->
+						device->hal_data->
 						register_base_addr) ||
-				OVERLAPS((u32)device->hal_data->
+				OVERLAPS(device->hal_data->
 						register_base_addr,
 						reg_size, reg_addr, reg_size) ||
 				OVERLAPS(reg_addr, reg_size,
-						(u32)device->hal_data->
+						device->hal_data->
 						register_base_addr, reg_size) ||
 				OVERLAPS(device->hal_data->
-						device_base_addr,
+						firmware_base_addr,
 						FIRMWARE_SIZE, fw_addr,
 						FIRMWARE_SIZE) ||
 				OVERLAPS(fw_addr, FIRMWARE_SIZE,
 						device->hal_data->
-						device_base_addr,
+						firmware_base_addr,
 						FIRMWARE_SIZE))) {
 				return 0;
 			} else {
@@ -2894,14 +2942,15 @@ static int venus_hfi_init_regs_and_interrupts(
 	struct hal_data *hal = NULL;
 	int rc = 0;
 
-	device->base_addr = res->fw_base_addr;
+	device->firmware_base = res->firmware_base;
 	device->register_base = res->register_base;
 	device->register_size = res->register_size;
 	device->irq = res->irq;
 
-	rc = venus_hfi_check_core_registered(hal_ctxt, device->base_addr,
-			device->register_base, device->register_size,
-			device->irq);
+	rc = venus_hfi_check_core_registered(hal_ctxt,
+			device->firmware_base,
+			(u8 *)(unsigned long)device->register_base,
+			device->register_size, device->irq);
 	if (!rc) {
 		dprintk(VIDC_ERR, "Core present/Already added\n");
 		rc = -EEXIST;
@@ -2917,13 +2966,13 @@ static int venus_hfi_init_regs_and_interrupts(
 		goto err_core_init;
 	}
 	hal->irq = device->irq;
-	hal->device_base_addr = device->base_addr;
-	hal->register_base_addr = devm_ioremap_nocache(&res->pdev->dev,
-			device->register_base, device->register_size);
+	hal->firmware_base_addr = device->firmware_base;
+	hal->register_base_addr = ioremap_nocache(device->register_base,
+			(unsigned long)device->register_size);
 	if (!hal->register_base_addr) {
 		dprintk(VIDC_ERR,
-			"could not map reg addr %d of size %d\n",
-			device->register_base, device->register_size);
+			"could not map reg addr 0x%pa of size %d\n",
+			&device->register_base, device->register_size);
 		goto error_irq_fail;
 	}
 
@@ -2935,6 +2984,10 @@ static int venus_hfi_init_regs_and_interrupts(
 		goto error_irq_fail;
 	}
 	disable_irq_nosync(device->irq);
+	dprintk(VIDC_INFO,
+		"firmware_base = 0x%pa, register_base = 0x%pa, register_size = %d\n",
+		&device->firmware_base, &device->register_base,
+		device->register_size);
 	return rc;
 
 error_irq_fail:
@@ -3224,8 +3277,10 @@ static int venus_hfi_set_ocmem(void *dev, struct ocmem_buf *ocmem)
 		return -EINVAL;
 	}
 	rhdr.resource_id = VIDC_RESOURCE_OCMEM;
-	rhdr.resource_handle = (u32) &device->resources.ocmem;
-	rhdr.size =	ocmem->len;
+	/* This handle is just used as a cookie and not(cannot be)
+	 * accessed by fw */
+	rhdr.resource_handle = (u32)(unsigned long)&device->resources.ocmem;
+	rhdr.size = ocmem->len;
 	rc = venus_hfi_core_set_resource(device, &rhdr, ocmem);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to set OCMEM on driver\n");
@@ -3256,7 +3311,9 @@ static int venus_hfi_unset_ocmem(void *dev)
 		goto ocmem_unset_failed;
 	}
 	rhdr.resource_id = VIDC_RESOURCE_OCMEM;
-	rhdr.resource_handle = (u32) &device->resources.ocmem;
+	/* This handle is just used as a cookie and not(cannot be)
+	 * accessed by fw */
+	rhdr.resource_handle = (u32)(unsigned long)&device->resources.ocmem;
 	rc = venus_hfi_core_release_resource(device, &rhdr);
 	if (rc)
 		dprintk(VIDC_ERR, "Failed to unset OCMEM on driver\n");
@@ -3301,8 +3358,31 @@ static void venus_hfi_ocmem_init(struct venus_hfi_device *device)
 		dprintk(VIDC_DBG, "Registered bus client %s\n", name);
 	}
 
-	device->bus_load.vote_data = NULL;
-	device->bus_load.vote_data_count = 0;
+	if (!device || !size) {
+		dprintk(VIDC_ERR, "%s Invalid param, core: %p, size: %lu\n",
+			__func__, device, size);
+		return -EINVAL;
+	}
+	ocmem_buffer = device->resources.ocmem.buf;
+	if (!ocmem_buffer || ocmem_buffer->len < size) {
+		ocmem_buffer = ocmem_allocate(OCMEM_VIDEO, size);
+		if (IS_ERR_OR_NULL(ocmem_buffer)) {
+			dprintk(VIDC_ERR,
+				"ocmem_allocate_nb failed: %lu\n",
+				(unsigned long) ocmem_buffer);
+			rc = -ENOMEM;
+			goto ocmem_set_failed;
+		}
+		device->resources.ocmem.buf = ocmem_buffer;
+		rc = venus_hfi_set_ocmem(device, ocmem_buffer);
+		if (rc) {
+			dprintk(VIDC_ERR, "Failed to set ocmem: %d\n", rc);
+			goto ocmem_set_failed;
+		}
+	} else
+		dprintk(VIDC_DBG,
+			"OCMEM is enough. reqd: %lu, available: %lu\n",
+			size, ocmem_buffer->len);
 
 	return rc;
 err_init_bus:
@@ -3728,11 +3808,21 @@ static int venus_hfi_get_fw_info(void *dev, enum fw_info info)
 
 	switch (info) {
 	case FW_BASE_ADDRESS:
-		rc = device->base_addr;
+		rc = (u32)device->firmware_base;
+		if ((phys_addr_t)rc != device->firmware_base) {
+			dprintk(VIDC_INFO,
+				"%s: firmware_base (0x%pa) truncated to 0x%x",
+				__func__, &device->firmware_base, rc);
+		}
 		break;
 
 	case FW_REGISTER_BASE:
-		rc = device->register_base;
+		rc = (u32)device->register_base;
+		if ((phys_addr_t)rc != device->register_base) {
+			dprintk(VIDC_INFO,
+				"%s: register_base (0x%pa) truncated to 0x%x",
+				__func__, &device->register_base, rc);
+		}
 		break;
 
 	case FW_REGISTER_SIZE:
