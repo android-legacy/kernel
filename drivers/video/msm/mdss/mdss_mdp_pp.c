@@ -3214,7 +3214,6 @@ static int pp_hist_enable(struct pp_hist_col_info *hist_info,
 	/* check if it is idle */
 	spin_lock_irqsave(&hist_info->hist_lock, flag);
 	if (hist_info->col_en) {
-		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 		pr_info("%s Hist collection has already been enabled %p",
 			__func__, hist_info->base);
 		ret = -EINVAL;
@@ -3352,7 +3351,6 @@ static int pp_hist_disable(struct pp_hist_col_info *hist_info)
 	mutex_lock(&hist_info->hist_mutex);
 	spin_lock_irqsave(&hist_info->hist_lock, flag);
 	if (hist_info->col_en == false) {
-		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 		pr_debug("Histogram already disabled (%p)", hist_info->base);
 		ret = -EINVAL;
 		goto exit;
@@ -5315,7 +5313,7 @@ int mdss_mdp_calib_config(struct mdp_calib_config_data *cfg, u32 *copyback)
 
 	/* Calib addrs are always offsets from the MDSS base */
 	ptr = (void *)((unsigned int) cfg->addr) +
-		((uintptr_t) mdss_res->mdss_base);
+		((uintptr_t) mdss_res->mdp_base);
 	if (is_valid_calib_addr(ptr, cfg->ops))
 		ret = 0;
 	else
