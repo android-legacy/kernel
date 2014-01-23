@@ -2231,7 +2231,7 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_USELTRFRAME:
 		property_id = HAL_CONFIG_VENC_USELTRFRAME;
-		useltr.refltr = (1 << ctrl->val);
+		useltr.refltr = ctrl->val;
 		useltr.useconstrnt = false;
 		useltr.frames = 0;
 		pdata = &useltr;
@@ -2291,7 +2291,6 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 	u32 property_id = 0;
 	void *pdata = NULL;
 	struct msm_vidc_core_capability *cap = NULL;
-	struct hal_initial_quantization quant;
 
 	if (!inst || !inst->core || !inst->core->device || !ctrl) {
 		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
@@ -2314,9 +2313,9 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 			ltrmode.ltrcount =  control[i].value;
 			if (ltrmode.ltrcount > cap->ltr_count.max) {
 				dprintk(VIDC_ERR,
-					"Invalid LTR count %d. Supported max: %d\n",
-					ltrmode.ltrcount,
-					cap->ltr_count.max);
+						"Invalid LTR count %d. Supported max: %d\n",
+						ltrmode.ltrcount,
+						cap->ltr_count.max);
 				/*
 				 * FIXME: Return an error (-EINVALID)
 				 * here once VP8 supports LTR count
@@ -2328,29 +2327,9 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 			property_id = HAL_PARAM_VENC_LTRMODE;
 			pdata = &ltrmode;
 			break;
-		case V4L2_CID_MPEG_VIDC_VIDEO_ENABLE_INITIAL_QP:
-			property_id = HAL_PARAM_VENC_ENABLE_INITIAL_QP;
-			quant.init_qp_enable = control[i].value;
-			pdata = &quant;
-			break;
-		case V4L2_CID_MPEG_VIDC_VIDEO_I_FRAME_QP:
-			quant.qpi = control[i].value;
-			property_id = HAL_PARAM_VENC_ENABLE_INITIAL_QP;
-			pdata = &quant;
-			break;
-		case V4L2_CID_MPEG_VIDC_VIDEO_P_FRAME_QP:
-			quant.qpp = control[i].value;
-			property_id = HAL_PARAM_VENC_ENABLE_INITIAL_QP;
-			pdata = &quant;
-			break;
-		case V4L2_CID_MPEG_VIDC_VIDEO_B_FRAME_QP:
-			quant.qpb = control[i].value;
-			property_id = HAL_PARAM_VENC_ENABLE_INITIAL_QP;
-			pdata = &quant;
-			break;
 		default:
 			dprintk(VIDC_ERR, "Invalid id set: %d\n",
-				control[i].id);
+					control[i].id);
 			rc = -ENOTSUPP;
 			break;
 		}
