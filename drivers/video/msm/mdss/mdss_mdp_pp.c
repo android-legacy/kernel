@@ -423,8 +423,7 @@ static void pp_ad_bypass_config(struct mdss_ad_info *ad,
 				struct mdss_mdp_ctl *ctl, u32 num, u32 *opmode);
 static int mdss_mdp_ad_setup(struct msm_fb_data_type *mfd);
 static void pp_ad_cfg_lut(char __iomem *addr, u32 *data);
-static int pp_ad_attenuate_bl(u32 bl, u32 *bl_out,
-		struct msm_fb_data_type *mfd);
+static u32 pp_ad_attenuate_bl(u32 bl, struct mdss_ad_info *ad);
 static int pp_num_to_side(struct mdss_mdp_ctl *ctl, u32 num);
 static inline bool pp_sts_is_enabled(u32 sts, int side);
 static inline void pp_sts_set_split_bits(u32 *sts, u32 bits);
@@ -1865,9 +1864,7 @@ int mdss_mdp_pp_resume(struct mdss_mdp_ctl *ctl, u32 dspp_num)
 			if (ad->state & PP_AD_STATE_BL_LIN) {
 				bl = ad->bl_lin[bl >> ad->bl_bright_shift];
 				bl = bl << ad->bl_bright_shift;
-				ret = pp_ad_attenuate_bl(bl, &bl, ad->mfd);
-				if (ret)
-					pr_err("Failed to attenuate BL\n");
+				bl = pp_ad_attenuate_bl(bl, ad);
 			}
 			linear_map(bl, &ad->bl_data,
 				ad->bl_mfd->panel_info->bl_max,
@@ -4718,9 +4715,7 @@ static int mdss_mdp_ad_setup(struct msm_fb_data_type *mfd)
 			if (ad->state & PP_AD_STATE_BL_LIN) {
 				bl = ad->bl_lin[bl >> ad->bl_bright_shift];
 				bl = bl << ad->bl_bright_shift;
-				ret = pp_ad_attenuate_bl(bl, &bl, ad->mfd);
-				if (ret)
-					pr_err("Failed to attenuate BL\n");
+				bl = pp_ad_attenuate_bl(bl, ad);
 			}
 			linear_map(bl, &ad->bl_data,
 				ad->bl_mfd->panel_info->bl_max,
@@ -4946,60 +4941,28 @@ static void pp_ad_cfg_lut(char __iomem *addr, u32 *data)
 			addr + ((PP_AD_LUT_LEN - 1) * 2));
 }
 
-static int  pp_ad_attenuate_bl(u32 bl, u32 *bl_out,
-	struct msm_fb_data_type *mfd)
+static u32 pp_ad_attenuate_bl(u32 bl, struct mdss_ad_info *ad)
 {
 	u32 shift = 0, ratio_temp = 0;
-	u32 n, lut_interval, bl_att;
-	int ret = -1;
-	struct mdss_ad_info *ad;
+	u32 n, lut_interval, bl_att, out;
 
-	if (bl < 0) {
-		pr_err("Invalid backlight input\n");
-		return ret;
-	}
-
-	ret = mdss_mdp_get_ad(mfd, &ad);
-	if (ret || !ad || !ad->bl_mfd || !ad->bl_mfd->panel_info ||
-		!ad->bl_mfd->panel_info->bl_max || !ad->bl_att_lut) {
-		pr_err("Failed to get the ad.\n");
-		return ret;
-	}
-	pr_debug("bl_in = %d\n", bl);
-	/* map panel backlight range to AD backlight range */
-	linear_map(bl, &bl, ad->bl_mfd->panel_info->bl_max,
-		MDSS_MDP_AD_BL_SCALE);
-
-	pr_debug("Before attenuation = %d\n", bl);
-	ratio_temp = MDSS_MDP_AD_BL_SCALE / (AD_BL_ATT_LUT_LEN - 1);
+	ratio_temp = ad->cfg.backlight_max / (AD_BL_ATT_LUT_LEN - 1);
 	while (ratio_temp > 0) {
 		ratio_temp = ratio_temp >> 1;
 		shift++;
 	}
 	n = bl >> shift;
-	if (n >= (AD_BL_ATT_LUT_LEN - 1)) {
-		pr_err("Invalid index for BL attenuation: %d.\n", n);
-		return ret;
-	}
-	lut_interval = (MDSS_MDP_AD_BL_SCALE + 1) / (AD_BL_ATT_LUT_LEN - 1);
+	lut_interval = (ad->cfg.backlight_max + 1) / (AD_BL_ATT_LUT_LEN - 1);
 	bl_att = ad->bl_att_lut[n] + (bl - lut_interval * n) *
 			(ad->bl_att_lut[n + 1] - ad->bl_att_lut[n]) /
 			lut_interval;
-	pr_debug("n = %d, bl_att = %d\n", n, bl_att);
 	if (ad->init.alpha_base)
-		*bl_out = (ad->init.alpha * bl_att +
+		out = (ad->init.alpha * bl_att +
 			(ad->init.alpha_base - ad->init.alpha) * bl) /
 			ad->init.alpha_base;
 	else
-		*bl_out = bl;
-
-	pr_debug("After attenuation = %d\n", *bl_out);
-	/* map AD backlight range back to panel backlight range */
-	linear_map(*bl_out, bl_out, MDSS_MDP_AD_BL_SCALE,
-		ad->bl_mfd->panel_info->bl_max);
-
-	pr_debug("bl_out = %d\n", *bl_out);
-	return 0;
+		out = bl;
+	return out;
 }
 
 int mdss_mdp_ad_addr_setup(struct mdss_data_type *mdata, u32 *ad_offsets)
