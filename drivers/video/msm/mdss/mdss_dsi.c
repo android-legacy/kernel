@@ -129,16 +129,20 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	}
 	i--;
 
-	/*
-	 * If continuous splash screen feature is enabled, then we need to
-	 * request all the GPIOs that have already been configured in the
-	 * bootloader. This needs to be done irresepective of whether
-	 * the lp11_init flag is set or not.
-	 */
-	if (pdata->panel_info.cont_splash_enabled ||
-		!pdata->panel_info.mipi.lp11_init) {
 		ret = mdss_dsi_panel_reset(pdata, 1);
-		if (ret)
+		if (ret) {
+			pr_err("%s: Panel reset failed. rc=%d\n",
+					__func__, ret);
+			if (msm_dss_enable_vreg(
+			ctrl_pdata->power_data.vreg_config,
+			ctrl_pdata->power_data.num_vreg, 0))
+				pr_err("Disable vregs failed\n");
+			goto error;
+		}
+	} else {
+
+		ret = mdss_dsi_panel_reset(pdata, 0);
+		if (ret) {
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
 	}
