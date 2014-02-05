@@ -84,8 +84,8 @@ static u32 mdss_mdp_smp_mmb_reserve(struct mdss_mdp_pipe_smp_map *smp_map,
 	 * that calls for change in smp configuration (addition/removal
 	 * of smp blocks), so that fallback solution happens.
 	 */
-	if (i != 0 && (((n < i) && !is_unused_smp_allowed()) || (n > i))) {
-		pr_debug("Can't change mmb config, num_blks: %d alloc: %d\n",
+	if (i != 0 && n != i) {
+		pr_debug("Can't change mmb config, num_blks: %zu alloc: %d\n",
 			n, i);
 		return 0;
 	}
