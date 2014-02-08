@@ -333,17 +333,24 @@ u32 mdss_mdp_perf_calc_pipe_prefill_single(struct mdss_mdp_prefill_params
 	return prefill_bytes;
 }
 
-static u32 mdss_mdp_get_bw_vote_mode(struct mdss_mdp_pipe *pipe)
+static inline bool mdss_mdp_is_single_pipe_per_mixer(
+	struct mdss_mdp_mixer *mixer)
 {
-	u32 bw_mode = MDSS_MDP_BW_MODE_NONE;
+	bool is_single = true;
+	int cnt = 0;
+	int i;
 
-	if (pipe->src_fmt->is_yuv) {
-		if ((pipe->img_width > 2560) || (pipe->img_height > 2560))
-			bw_mode = MDSS_MDP_BW_MODE_UHD;
-		else if ((pipe->img_width <= 2560) && (pipe->img_width > 1920))
-			bw_mode = MDSS_MDP_BW_MODE_QHD;
+	for (i = 0; i < MDSS_MDP_MAX_STAGE; i++) {
+		struct mdss_mdp_pipe *pipe = mixer->stage_pipe[i];
+		if (pipe) {
+			cnt++;
+			if (cnt > 1) {
+				is_single = false;
+				break;
+			}
+		}
 	}
-	return bw_mode;
+	return is_single;
 }
 
 /**
@@ -470,10 +477,7 @@ int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	prefill_params.is_hflip = pipe->flags & MDP_FLIP_LR;
 	prefill_params.is_cmd = !mixer->ctl->is_video_mode;
 
-	if (mixer->ctl->is_video_mode)
-		perf->bw_vote_mode = mdss_mdp_get_bw_vote_mode(pipe);
-
-	if (is_single_layer)
+	if (mdss_mdp_is_single_pipe_per_mixer(mixer))
 		perf->prefill_bytes =
 			mdss_mdp_perf_calc_pipe_prefill_single(&prefill_params);
 	else if (!prefill_params.is_cmd)
