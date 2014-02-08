@@ -84,6 +84,8 @@ void mdss_dsi_ctrl_init(struct mdss_dsi_ctrl_pdata *ctrl)
 
 	ctrl_list[ctrl->ndx] = ctrl;	/* keep it */
 
+	ctrl_list[ctrl->ndx] = ctrl;	/* keep it */
+
 	if (mdss_register_irq(ctrl->dsi_hw))
 		pr_err("%s: mdss_register_irq failed.\n", __func__);
 
@@ -247,8 +249,6 @@ void mdss_dsi_host_init(struct mdss_panel_data *pdata)
 				panel_data);
 
 	pinfo = &pdata->panel_info.mipi;
-
-	pinfo->rgb_swap = DSI_RGB_SWAP_RGB;
 
 	if (pinfo->mode == DSI_VIDEO_MODE) {
 		data = 0;
