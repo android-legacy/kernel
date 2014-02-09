@@ -2492,9 +2492,6 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	if (rc)
 		pr_debug("max bandwidth (per pipe) property not specified\n");
 
-	mdata->traffic_shaper_en = of_property_read_bool(pdev->dev.of_node,
-		 "qcom,mdss-traffic-shaper-enabled");
-
 	return 0;
 }
 
