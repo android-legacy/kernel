@@ -131,7 +131,7 @@ struct mdss_data_type {
 	u32 has_bwc;
 	u32 has_decimation;
 	u32 wfd_mode;
-	atomic_t sd_client_count;
+	u32 has_no_lut_read;
 	u8 has_wb_ad;
 	u8 has_non_scalar_rgb;
 	bool has_src_split;
