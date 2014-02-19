@@ -2391,11 +2391,12 @@ static void mdss_mdp_mixer_setup(struct mdss_mdp_ctl *master_ctl,
 	u32 off, blend_op, blend_stage, mpq_num;
 	u32 mixercfg = 0, mixer_op_mode = 0, bg_alpha_enable = 0;
 	u32 fg_alpha = 0, bg_alpha = 0;
-	struct mdss_mdp_pipe *pipe;
-	struct mdss_mdp_ctl *ctl = NULL;
-	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	struct mdss_mdp_mixer *mixer = mdss_mdp_mixer_get(master_ctl,
-		mixer_mux);
+	int stage, secure = 0;
+	int screen_state;
+	int outsize = 0;
+	u32 op_mode;
+
+	screen_state = ctl->force_screen_state;
 
 	if (!mixer)
 		return;
@@ -2556,14 +2557,12 @@ update_mixer:
 	else
 		ctl->flush_bits |= BIT(6) << mixer->num;
 
+	op_mode = mdp_mixer_read(mixer, MDSS_MDP_REG_LM_OP_MODE);
 	/* Read GC enable/disable status on LM */
-	mixer_op_mode |=
-		(mdp_mixer_read(mixer, MDSS_MDP_REG_LM_OP_MODE) & BIT(0));
+	op_mode = (op_mode & BIT(0));
+	blend_color_out |= op_mode;
 
-	if (mdata->has_src_split && mixer_mux == MDSS_MDP_MIXER_MUX_RIGHT)
-		mixer_op_mode |= BIT(31);
-
-	mdp_mixer_write(mixer, MDSS_MDP_REG_LM_OP_MODE, mixer_op_mode);
+	mdp_mixer_write(mixer, MDSS_MDP_REG_LM_OP_MODE, blend_color_out);
 	off = __mdss_mdp_ctl_get_mixer_off(mixer);
 	mdss_mdp_ctl_write(ctl, off, mixercfg);
 }
