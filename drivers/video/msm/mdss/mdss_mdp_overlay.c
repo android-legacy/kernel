@@ -1032,37 +1032,18 @@ static void mdss_mdp_overlay_cleanup(struct msm_fb_data_type *mfd)
 	bool recovery_mode = false;
 	LIST_HEAD(destroy_pipes);
 
-	mutex_lock(&mdp5_data->list_lock);
-	list_for_each_entry_safe(pipe, tmp, &mdp5_data->pipes_cleanup, list) {
-		list_move(&pipe->list, &destroy_pipes);
+	mutex_lock(&mfd->lock);
+	list_for_each_entry_safe(pipe, tmp, &mdp5_data->pipes_cleanup,
+				cleanup_list) {
+		list_move(&pipe->cleanup_list, &destroy_pipes);
 
 		/* make sure pipe fetch has been halted before freeing buffer */
-		if (mdss_mdp_pipe_fetch_halt(pipe)) {
-			/*
-			 * if pipe is not able to halt. Enter recovery mode,
-			 * by un-staging any pipes that are attached to mixer
-			 * so that any freed pipes that are not able to halt
-			 * can be staged in solid fill mode and be reset
-			 * with next vsync
-			 */
-			if (!recovery_mode) {
-				recovery_mode = true;
-				mdss_mdp_mixer_unstage_all(ctl->mixer_left);
-				mdss_mdp_mixer_unstage_all(ctl->mixer_right);
-			}
-			pipe->params_changed++;
-			mdss_mdp_pipe_queue_data(pipe, NULL);
-		}
-	}
-
-	if (recovery_mode) {
-		pr_warn("performing recovery sequence for fb%d\n", mfd->index);
-		__overlay_kickoff_requeue(mfd);
+		mdss_mdp_pipe_fetch_halt(pipe);
 	}
 
 	__mdss_mdp_overlay_free_list_purge(mfd);
 
-	list_for_each_entry(pipe, &mdp5_data->pipes_used, list) {
+	list_for_each_entry(pipe, &mdp5_data->pipes_used, used_list) {
 		if (pipe->back_buf.num_planes) {
 			/* make back buffer active */
 			__mdss_mdp_overlay_free_list_add(mfd, &pipe->front_buf);
@@ -1070,20 +1051,12 @@ static void mdss_mdp_overlay_cleanup(struct msm_fb_data_type *mfd)
 		}
 	}
 
-	list_for_each_entry_safe(pipe, tmp, &destroy_pipes, list) {
-		/*
-		 * in case of secure UI, the buffer needs to be released as
-		 * soon as session is closed.
-		 */
-		if (pipe->flags & MDP_SECURE_DISPLAY_OVERLAY_SESSION)
-			mdss_mdp_data_free(&pipe->front_buf);
-		else
-			__mdss_mdp_overlay_free_list_add(mfd, &pipe->front_buf);
-		mdss_mdp_data_free(&pipe->back_buf);
-		list_del_init(&pipe->list);
+	list_for_each_entry_safe(pipe, tmp, &destroy_pipes, cleanup_list) {
+		__mdss_mdp_overlay_free_list_add(mfd, &pipe->front_buf);
+		mdss_mdp_overlay_free_buf(&pipe->back_buf);
 		mdss_mdp_pipe_destroy(pipe);
 	}
-	mutex_unlock(&mdp5_data->list_lock);
+	mutex_unlock(&mfd->lock);
 }
 
 void mdss_mdp_handoff_cleanup_pipes(struct msm_fb_data_type *mfd,
