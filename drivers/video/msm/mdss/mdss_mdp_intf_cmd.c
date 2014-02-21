@@ -428,15 +428,12 @@ static int mdss_mdp_cmd_add_vsync_handler(struct mdss_mdp_ctl *ctl,
 		list_add(&handle->list, &ctx->vsync_handlers);
 
 		enable_rdptr = !handle->cmd_post_flush;
-		if (enable_rdptr) {
+		if (enable_rdptr)
 			ctx->vsync_enabled++;
-			if (sctx)
-				sctx->vsync_enabled++;
-		}
 	}
 	spin_unlock_irqrestore(&ctx->clk_lock, flags);
 
-	if (enable_rdptr) {
+	if (enable_rdptr)
 		mdss_mdp_cmd_clk_on(ctx);
 		if (sctx)
 			mdss_mdp_cmd_clk_on(sctx);
@@ -448,8 +445,7 @@ static int mdss_mdp_cmd_add_vsync_handler(struct mdss_mdp_ctl *ctl,
 static int mdss_mdp_cmd_remove_vsync_handler(struct mdss_mdp_ctl *ctl,
 		struct mdss_mdp_vsync_handler *handle)
 {
-	struct mdss_mdp_ctl *sctl;
-	struct mdss_mdp_cmd_ctx *ctx, *sctx = NULL;
+	struct mdss_mdp_cmd_ctx *ctx;
 	unsigned long flags;
 
 	ctx = (struct mdss_mdp_cmd_ctx *) ctl->priv_data;
@@ -458,23 +454,14 @@ static int mdss_mdp_cmd_remove_vsync_handler(struct mdss_mdp_ctl *ctl,
 		return -ENODEV;
 	}
 
-	MDSS_XLOG(ctl->num, atomic_read(&ctx->koff_cnt), ctx->clk_enabled,
-				ctx->rdptr_enabled, 0x88888);
-	sctl = mdss_mdp_get_split_ctl(ctl);
-	if (sctl)
-		sctx = (struct mdss_mdp_cmd_ctx *) sctl->priv_data;
-
 	spin_lock_irqsave(&ctx->clk_lock, flags);
 	if (handle->enabled) {
 		handle->enabled = false;
 		list_del_init(&handle->list);
 
 		if (!handle->cmd_post_flush) {
-			if (ctx->vsync_enabled) {
+			if (ctx->vsync_enabled)
 				ctx->vsync_enabled--;
-				if (sctx)
-					sctx->vsync_enabled--;
-			}
 			else
 				WARN(1, "unbalanced vsync disable");
 		}
