@@ -174,13 +174,9 @@ struct venus_hfi_device {
 	u32 intr_status;
 	u32 device_id;
 	u32 clk_load;
-	u32 last_packet_type;
-	struct {
-		struct vidc_bus_vote_data *vote_data;
-		u32 vote_data_count;
-	} bus_load;
-	enum clock_state clk_state;
-	bool power_enabled;
+	struct vidc_bus_vote_data *bus_load;
+	u32 clocks_enabled;
+	u32 power_enabled;
 	struct mutex read_lock;
 	struct mutex write_lock;
 	struct mutex resource_lock;

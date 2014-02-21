@@ -46,17 +46,14 @@
 #define V4L2_EVENT_RELEASE_BUFFER_REFERENCE \
 		V4L2_EVENT_MSM_VIDC_RELEASE_BUFFER_REFERENCE
 
+#define NUM_MBS_PER_SEC(__height, __width, __fps) ({\
+	(__height / 16) * (__width  / 16) * __fps; \
+})
+
 struct getprop_buf {
 	struct list_head list;
 	void *data;
 };
-
-static void msm_comm_generate_session_error(struct msm_vidc_inst *inst);
-static void msm_comm_generate_sys_error(struct msm_vidc_inst *inst);
-static void handle_session_error(enum command_response cmd, void *data);
-static void msm_comm_monitor_ftb(struct msm_vidc_inst *inst);
-static int msm_comm_scale_clocks_dcvs(struct msm_vidc_inst *inst, bool fbd);
-static int msm_comm_check_dcvs_supported(struct msm_vidc_inst *inst);
 
 static inline bool is_turbo_session(struct msm_vidc_inst *inst)
 {
@@ -91,33 +88,6 @@ static int msm_comm_get_mbs_per_sec(struct msm_vidc_inst *inst)
 	width = max(inst->prop.width[CAPTURE_PORT],
 		inst->prop.width[OUTPUT_PORT]);
 	return NUM_MBS_PER_SEC(height, width, inst->prop.fps);
-}
-
-static inline int msm_comm_get_mbs_per_frame(struct msm_vidc_inst *inst)
-{
-	int height, width;
-	height = inst->prop.height[CAPTURE_PORT];
-	width = inst->prop.width[CAPTURE_PORT];
-	return NUM_MBS_PER_FRAME(height, width);
-}
-
-static inline int msm_comm_count_active_instances(struct msm_vidc_core *core)
-{
-	int active_instances = 0;
-	struct msm_vidc_inst *inst = NULL;
-	if (!core) {
-		dprintk(VIDC_ERR, "%s: Invalid args: %p\n", __func__, core);
-		return -EINVAL;
-	}
-
-	mutex_lock(&core->lock);
-	list_for_each_entry(inst, &core->instances, list) {
-		if (inst->state >= MSM_VIDC_START_DONE &&
-			inst->state < MSM_VIDC_STOP_DONE)
-			active_instances++;
-	}
-	mutex_unlock(&core->lock);
-	return active_instances;
 }
 
 enum load_calc_quirks {
@@ -160,7 +130,6 @@ static int msm_comm_get_load(struct msm_vidc_core *core,
 		return -EINVAL;
 	}
 
-	mutex_lock(&core->lock);
 	list_for_each_entry(inst, &core->instances, list) {
 		if (inst->session_type != type)
 			continue;
@@ -169,7 +138,6 @@ static int msm_comm_get_load(struct msm_vidc_core *core,
 		num_mbs_per_sec += msm_comm_get_inst_load(inst, quirks);
 		mutex_unlock(&inst->lock);
 	}
-	mutex_unlock(&core->lock);
 
 	return num_mbs_per_sec;
 }
@@ -264,7 +232,6 @@ static int msm_comm_vote_bus(struct msm_vidc_core *core)
 		return -EINVAL;
 	}
 
-	mutex_lock(&core->lock);
 	list_for_each_entry(inst, &core->instances, list) {
 		++vote_data_count;
 	}
@@ -273,8 +240,7 @@ static int msm_comm_vote_bus(struct msm_vidc_core *core)
 			GFP_TEMPORARY);
 	if (!vote_data) {
 		dprintk(VIDC_ERR, "%s: failed to allocate memory\n", __func__);
-		rc = -ENOMEM;
-		goto fail_alloc;
+		return -ENOMEM;
 	}
 
 	list_for_each_entry(inst, &core->instances, list) {
@@ -296,7 +262,6 @@ static int msm_comm_vote_bus(struct msm_vidc_core *core)
 
 		i++;
 	}
-	mutex_unlock(&core->lock);
 
 	rc = call_hfi_op(hdev, vote_bus, hdev->hfi_device_data, vote_data,
 			vote_data_count);
@@ -304,10 +269,6 @@ static int msm_comm_vote_bus(struct msm_vidc_core *core)
 		dprintk(VIDC_ERR, "Failed to scale bus: %d\n", rc);
 
 	kfree(vote_data);
-	return rc;
-
-fail_alloc:
-	mutex_unlock(&core->lock);
 	return rc;
 }
 
@@ -2062,7 +2023,7 @@ fail_core_init:
 fail_load_fw:
 	msm_comm_unvote_buses(core);
 fail_vote_bus:
-	mutex_unlock(&core->lock);
+	mutex_unlock(&core->sync_lock);
 	return rc;
 }
 
@@ -2085,23 +2046,25 @@ static int msm_vidc_deinit_core(struct msm_vidc_inst *inst)
 				core->id, core->state);
 		goto core_already_uninited;
 	}
-	mutex_unlock(&core->lock);
-
 	msm_comm_scale_clocks_and_bus(inst);
-
-	mutex_lock(&core->lock);
 	if (list_empty(&core->instances)) {
-		cancel_delayed_work(&core->fw_unload_work);
-
-		/*
-		* Delay unloading of firmware for 10 sec. This is useful
-		* in avoiding firmware download delays in cases where we
-		* will have a burst of back to back video playback sessions
-		* e.g. thumbnail generation.
-		*/
-		schedule_delayed_work(&core->fw_unload_work,
-			msecs_to_jiffies(core->state == VIDC_CORE_INVALID ?
-					0 : 10000));
+		if (core->resources.has_ocmem) {
+			if (inst->state != MSM_VIDC_CORE_INVALID)
+				msm_comm_unset_ocmem(core);
+			call_hfi_op(hdev, free_ocmem, hdev->hfi_device_data);
+		}
+		dprintk(VIDC_DBG, "Calling vidc_hal_core_release\n");
+		rc = call_hfi_op(hdev, core_release, hdev->hfi_device_data);
+		if (rc) {
+			dprintk(VIDC_ERR, "Failed to release core, id = %d\n",
+							core->id);
+			goto exit;
+		}
+		mutex_lock(&core->lock);
+		core->state = VIDC_CORE_UNINIT;
+		mutex_unlock(&core->lock);
+		call_hfi_op(hdev, unload_fw, hdev->hfi_device_data);
+		msm_comm_unvote_buses(core);
 	}
 
 core_already_uninited:
@@ -2168,7 +2131,6 @@ static void msm_vidc_print_running_insts(struct msm_vidc_core *core)
 	dprintk(VIDC_ERR, "%4s|%4s|%4s|%4s|%4s\n",
 			"type", "w", "h", "fps", "prop");
 
-	mutex_lock(&core->lock);
 	list_for_each_entry(temp, &core->instances, list) {
 		mutex_lock(&temp->lock);
 		if (temp->state >= MSM_VIDC_OPEN_DONE &&
@@ -2198,6 +2160,7 @@ static int msm_vidc_load_resources(int flipped_state,
 	int rc = 0;
 	struct hfi_device *hdev;
 	int num_mbs_per_sec = 0;
+	int height, width;
 	struct msm_vidc_core *core;
 	enum load_calc_quirks quirks = LOAD_CALC_IGNORE_TURBO_LOAD |
 		LOAD_CALC_IGNORE_THUMBNAIL_LOAD;
@@ -2215,9 +2178,11 @@ static int msm_vidc_load_resources(int flipped_state,
 		return -EINVAL;
 	}
 
+	mutex_lock(&core->sync_lock);
 	num_mbs_per_sec =
 		msm_comm_get_load(core, MSM_VIDC_DECODER, quirks) +
 		msm_comm_get_load(core, MSM_VIDC_ENCODER, quirks);
+	mutex_unlock(&core->sync_lock);
 
 	if (num_mbs_per_sec > core->resources.max_load) {
 		dprintk(VIDC_ERR, "HW is overloaded, needed: %d max: %d\n",
@@ -2236,7 +2201,29 @@ static int msm_vidc_load_resources(int flipped_state,
 						inst, inst->state);
 		goto exit;
 	}
-
+	if (core->resources.has_ocmem) {
+		mutex_lock(&core->sync_lock);
+		height = max(inst->prop.height[CAPTURE_PORT],
+			inst->prop.height[OUTPUT_PORT]);
+		width = max(inst->prop.width[CAPTURE_PORT],
+			inst->prop.width[OUTPUT_PORT]);
+		rc = msm_comm_vote_bus(core);
+		mutex_unlock(&core->sync_lock);
+		if (!rc) {
+			mutex_lock(&core->sync_lock);
+			rc = call_hfi_op(hdev, alloc_ocmem,
+					hdev->hfi_device_data,
+					core->resources.has_ocmem);
+			mutex_unlock(&core->sync_lock);
+			if (rc) {
+				dprintk(VIDC_WARN,
+				"Failed to allocate OCMEM. Performance will be impacted\n");
+			}
+		} else {
+			dprintk(VIDC_WARN,
+			"Failed to vote for OCMEM BW. Performance will be impacted\n");
+		}
+	}
 	rc = call_hfi_op(hdev, session_load_res, (void *) inst->session);
 	if (rc) {
 		dprintk(VIDC_ERR,
@@ -3832,6 +3819,7 @@ static int msm_vidc_load_supported(struct msm_vidc_inst *inst)
 					MSM_VIDC_DECODER, quirks);
 		num_mbs_per_sec += msm_comm_get_load(inst->core,
 					MSM_VIDC_ENCODER, quirks);
+		mutex_unlock(&inst->core->sync_lock);
 		if (num_mbs_per_sec > inst->core->resources.max_load) {
 			dprintk(VIDC_ERR,
 				"H/W is overloaded. needed: %d max: %d\n",
