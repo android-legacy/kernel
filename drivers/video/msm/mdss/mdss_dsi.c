@@ -669,6 +669,11 @@ static int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl,
 	int rc;
 	struct mdss_dsi_ctrl_pdata *sctrl = NULL;
 
+	if (&ctrl->mmss_misc_io == NULL) {
+		pr_err("%s: mmss_misc_io is NULL. ULPS not valid\n", __func__);
+		return -EINVAL;
+	}
+
 	if (ctrl->flags & DSI_FLAG_CLOCK_MASTER)
 		sctrl = mdss_dsi_ctrl_slave(ctrl);
 
@@ -1407,6 +1412,8 @@ static int mdss_dsi_ctrl_remove(struct platform_device *pdev)
 
 	mfd = platform_get_drvdata(pdev);
 	msm_dss_iounmap(&ctrl_pdata->mmss_misc_io);
+	msm_dss_iounmap(&ctrl_pdata->phy_io);
+	msm_dss_iounmap(&ctrl_pdata->ctrl_io);
 	return 0;
 }
 
@@ -1470,13 +1477,6 @@ int mdss_dsi_retrieve_ctrl_resources(struct platform_device *pdev, int mode,
 	if (rc) {
 		pr_debug("%s:%d mmss_misc IO remap failed\n",
 			__func__, __LINE__);
-	}
-
-	rc = msm_dss_ioremap_byname(pdev, &ctrl->mmss_misc_io,
-		"mmss_misc_phys");
-	if (rc) {
-		pr_err("%s:%d mmss_misc IO remap failed\n", __func__, __LINE__);
-		return rc;
 	}
 
 	return 0;

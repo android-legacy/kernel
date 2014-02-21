@@ -1072,55 +1072,16 @@ static int mdss_dsi_clk_ctrl_sub(struct mdss_dsi_ctrl_pdata *ctrl,
 	pr_debug("%s: ndx=%d clk_type=%08x enable=%d\n", __func__,
 		ctrl->ndx, clk_type, enable);
 
-	if (enable) {
-		if (clk_type & DSI_BUS_CLKS) {
-			rc = mdss_dsi_core_power_ctrl(ctrl, enable);
-			if (rc) {
-				pr_err("%s: Failed to enable core power. rc=%d\n",
-					__func__, rc);
-				goto error;
-			}
-		}
-		if (clk_type & DSI_LINK_CLKS) {
-			rc = mdss_dsi_link_clk_start(ctrl);
-			if (rc) {
-				pr_err("%s: Failed to start link clocks. rc=%d\n",
-					__func__, rc);
-				goto error_link_clk_start;
-			}
-			/* Disable ULPS, if enabled */
-			if (ctrl->ulps) {
-				rc = mdss_dsi_ulps_config(ctrl, 0);
-				if (rc) {
-					pr_err("%s: Failed to exit ulps. rc=%d\n",
-						__func__, rc);
-					goto error_ulps_exit;
-				}
-			}
-		}
-	} else {
-		if (clk_type & DSI_LINK_CLKS) {
-			/*
-			 * If ULPS feature is enabled, enter ULPS first.
-			 * No need to enable ULPS when turning off clocks
-			 * while blanking the panel.
-			 */
-			if ((mdss_dsi_ulps_feature_enabled(pdata)) &&
-				(pdata->panel_info.blank_state !=
-				 MDSS_PANEL_BLANK_BLANK))
-				mdss_dsi_ulps_config(ctrl, 1);
-			mdss_dsi_link_clk_stop(ctrl);
-		}
-		if (clk_type & DSI_BUS_CLKS) {
-			rc = mdss_dsi_core_power_ctrl(ctrl, enable);
-			if (rc) {
-				pr_err("%s: Failed to disable core power. rc=%d\n",
-					__func__, rc);
-			}
-		}
+	if (left_ctrl &&
+			(ctrl->panel_data.panel_info.pdest
+			 ==
+			 DISPLAY_2)) {
+		MIPI_OUTP(left_ctrl->phy_io.base + 0x0170, 0x000);
+		MIPI_OUTP(left_ctrl->phy_io.base + 0x0298, 0x000);
 	}
 
-	return rc;
+	MIPI_OUTP(ctrl->phy_io.base + 0x0170, 0x000);
+	MIPI_OUTP(ctrl->phy_io.base + 0x0298, 0x000);
 
 error_ulps_exit:
 	mdss_dsi_link_clk_stop(ctrl);
@@ -1137,8 +1098,9 @@ static DEFINE_MUTEX(dsi_clk_lock); /* per system */
 
 bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type)
 {
-	bool bus_enabled = true;
-	bool link_enabled = true;
+	struct mdss_dsi_phy_ctrl *pd;
+	int i, off, ln, offset;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL, *temp_ctrl = NULL;
 
 	mutex_lock(&dsi_clk_lock);
 	if (clk_type & DSI_BUS_CLKS)
@@ -1150,121 +1112,91 @@ bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type)
 	return bus_enabled && link_enabled;
 }
 
-int mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl,
-	u8 clk_type, int enable)
-{
-	int rc = 0;
-	int link_changed = 0, bus_changed = 0;
-	int m_link_changed = 0, m_bus_changed = 0;
-	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
+	/* Strength ctrl 0 */
+	MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x0184, pd->strength[0]);
 
-	if (!ctrl) {
-		pr_err("%s: Invalid arg\n", __func__);
-		return -EINVAL;
+	/* phy regulator ctrl settings. Both the DSI controller
+	   have one regulator */
+	if ((ctrl_pdata->panel_data).panel_info.pdest == DISPLAY_1)
+		temp_ctrl = ctrl_pdata;
+	else if (left_ctrl && (pdata->panel_info.pdest == DISPLAY_2))
+		temp_ctrl = left_ctrl;
+
+	if (!temp_ctrl) {
+		pr_err("%s: Invalid ctrl data\n", __func__);
+		return;
 	}
 
-	/*
-	 * In sync_wait_broadcast mode, we need to enable clocks
-	 * for the other controller as well when enabling clocks
-	 * for the trigger controller.
-	 *
-	 * If sync wait_broadcase mode is not enabled, but if split display
-	 * mode is enabled where both DSI controller's branch clocks are
-	 * sourced out of a single PLL, then we need to ensure that the
-	 * controller associated with that PLL also has it's clocks turned
-	 * on. This is required to make sure that if that controller's PLL/PHY
-	 * are clamped then they can be removed.
-	 */
-	if (mdss_dsi_sync_wait_trigger(ctrl)) {
-		mctrl = mdss_dsi_get_other_ctrl(ctrl);
-		if (!mctrl)
-			pr_warn("%s: Unable to get other control\n", __func__);
-	} else if (mdss_dsi_is_ctrl_clk_slave(ctrl)) {
-		mctrl = mdss_dsi_get_ctrl_clk_master();
-		if (!mctrl)
-			pr_warn("%s: Unable to get clk master control\n",
-				__func__);
+	/* Regulator ctrl 0 */
+	MIPI_OUTP((temp_ctrl->phy_io.base) + 0x280, 0x0);
+	/* Regulator ctrl - CAL_PWR_CFG */
+	MIPI_OUTP((temp_ctrl->phy_io.base) + 0x298, pd->regulator[6]);
+
+	/* Regulator ctrl - TEST */
+	MIPI_OUTP((temp_ctrl->phy_io.base) + 0x294, pd->regulator[5]);
+	/* Regulator ctrl 3 */
+	MIPI_OUTP((temp_ctrl->phy_io.base) + 0x28c, pd->regulator[3]);
+	/* Regulator ctrl 2 */
+	MIPI_OUTP((temp_ctrl->phy_io.base) + 0x288, pd->regulator[2]);
+	/* Regulator ctrl 1 */
+	MIPI_OUTP((temp_ctrl->phy_io.base) + 0x284, pd->regulator[1]);
+	/* Regulator ctrl 0 */
+	MIPI_OUTP((temp_ctrl->phy_io.base) + 0x280, pd->regulator[0]);
+	/* Regulator ctrl 4 */
+	MIPI_OUTP((temp_ctrl->phy_io.base) + 0x290, pd->regulator[4]);
+
+	/* LDO ctrl 0 */
+	if ((ctrl_pdata->panel_data).panel_info.pdest == DISPLAY_1)
+		MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x1dc, 0x00);
+	else
+		MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x1dc, 0x00);
+
+	off = 0x0140;	/* phy timing ctrl 0 - 11 */
+	for (i = 0; i < 12; i++) {
+		MIPI_OUTP((ctrl_pdata->phy_io.base) + off, pd->timing[i]);
+		wmb();
+		off += 4;
 	}
 
-	pr_debug("%s++: ndx=%d clk_type=%d bus_clk_cnt=%d link_clk_cnt=%d\n",
-		__func__, ctrl->ndx, clk_type, ctrl->bus_clk_cnt,
-		ctrl->link_clk_cnt);
-	pr_debug("%s++: mctrl=%s m_bus_clk_cnt=%d m_link_clk_cnt=%d, enable=%d\n",
-		__func__, mctrl ? "yes" : "no", mctrl ? mctrl->bus_clk_cnt : -1,
-		mctrl ? mctrl->link_clk_cnt : -1, enable);
+	/* MMSS_DSI_0_PHY_DSIPHY_CTRL_1 */
+	MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x0174, 0x00);
+	/* MMSS_DSI_0_PHY_DSIPHY_CTRL_0 */
+	MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x0170, 0x5f);
+	wmb();
 
-	mutex_lock(&dsi_clk_lock);
+	/* Strength ctrl 1 */
+	MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x0188, pd->strength[1]);
+	wmb();
 
-	if (clk_type & DSI_BUS_CLKS) {
-		bus_changed = __mdss_dsi_update_clk_cnt(&ctrl->bus_clk_cnt,
-			enable);
-		if (bus_changed && mctrl)
-			m_bus_changed = __mdss_dsi_update_clk_cnt(
-				&mctrl->bus_clk_cnt, enable);
-	}
-
-	if (clk_type & DSI_LINK_CLKS) {
-		link_changed = __mdss_dsi_update_clk_cnt(&ctrl->link_clk_cnt,
-			enable);
-		if (link_changed && mctrl)
-			m_link_changed = __mdss_dsi_update_clk_cnt(
-				&mctrl->link_clk_cnt, enable);
-	}
-
-	if (!link_changed && !bus_changed)
-		goto no_error; /* clk cnts updated, nothing else needed */
-
-	/*
-	 * If updating link clock, need to make sure that the bus
-	 * clocks are enabled
-	 */
-	if (link_changed && (!bus_changed && !ctrl->bus_clk_cnt)) {
-		pr_err("%s: Trying to enable link clks w/o enabling bus clks for ctrl%d",
-			__func__, mctrl->ndx);
-		goto error_mctrl_start;
-	}
-
-	if (m_link_changed && (!m_bus_changed && !mctrl->bus_clk_cnt)) {
-		pr_err("%s: Trying to enable link clks w/o enabling bus clks for ctrl%d",
-			__func__, ctrl->ndx);
-		goto error_mctrl_start;
-	}
-
-	if (enable && (m_bus_changed || m_link_changed)) {
-		rc = mdss_dsi_clk_ctrl_sub(mctrl, clk_type, enable);
-		if (rc) {
-			pr_err("Failed to start mctrl clocks. rc=%d\n", rc);
-			goto error_mctrl_start;
+	/* 4 lanes + clk lane configuration */
+	/* lane config n * (0 - 4) & DataPath setup */
+	for (ln = 0; ln < 5; ln++) {
+		off = (ln * 0x40);
+		for (i = 0; i < 9; i++) {
+			offset = i + (ln * 9);
+			MIPI_OUTP((ctrl_pdata->phy_io.base) + off,
+							pd->lanecfg[offset]);
+			wmb();
+			off += 4;
 		}
 	}
 
-	if (!enable && (m_bus_changed || m_link_changed)) {
-		rc = mdss_dsi_clk_ctrl_sub(mctrl, clk_type, enable);
-		if (rc) {
-			pr_err("Failed to stop mctrl clocks. rc=%d\n", rc);
-			goto error_mctrl_stop;
-		}
-	}
-	rc = mdss_dsi_clk_ctrl_sub(ctrl, clk_type, enable);
-	if (rc) {
-		pr_err("Failed to %s ctrl clocks. rc=%d\n",
-			(enable ? "start" : "stop"), rc);
-		goto error_ctrl;
-	}
+	/* MMSS_DSI_0_PHY_DSIPHY_CTRL_0 */
+	MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x0170, 0x5f);
+	wmb();
 
-	goto no_error;
+	/* DSI_0_PHY_DSIPHY_GLBL_TEST_CTRL */
+	if ((ctrl_pdata->panel_data).panel_info.pdest == DISPLAY_1)
+		MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x01d4, 0x01);
+	else
+		MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x01d4, 0x00);
+	wmb();
 
-error_mctrl_stop:
-	mdss_dsi_clk_ctrl_sub(ctrl, clk_type, enable ? 0 : 1);
-error_ctrl:
-	if (enable && (m_bus_changed || m_link_changed))
-		mdss_dsi_clk_ctrl_sub(mctrl, clk_type, 0);
-error_mctrl_start:
-	if (clk_type & DSI_BUS_CLKS) {
-		if (mctrl)
-			__mdss_dsi_update_clk_cnt(&mctrl->bus_clk_cnt,
-				enable ? 0 : 1);
-		__mdss_dsi_update_clk_cnt(&ctrl->bus_clk_cnt, enable ? 0 : 1);
+	off = 0x01b4;	/* phy BIST ctrl 0 - 5 */
+	for (i = 0; i < 6; i++) {
+		MIPI_OUTP((ctrl_pdata->phy_io.base) + off, pd->bistctrl[i]);
+		wmb();
+		off += 4;
 	}
 	if (clk_type & DSI_LINK_CLKS) {
 		if (mctrl)
