@@ -438,19 +438,6 @@ static inline void mdss_mdp_pp_get_dcm_state(struct mdss_mdp_pipe *pipe,
 		*dcm_state = pipe->mixer_left->ctl->mfd->dcm_state;
 }
 
-inline int linear_map(int in, int *out, int in_max, int out_max)
-{
-	if (in < 0 || !out || in_max <= 0 || out_max <= 0)
-		return -EINVAL;
-	*out = ((in * out_max) / in_max);
-	pr_debug("in = %d, out = %d, in_max = %d, out_max = %d\n",
-		in, *out, in_max, out_max);
-	if ((in > 0) && (*out == 0))
-		*out = 1;
-	return 0;
-
-}
-
 int mdss_mdp_csc_setup_data(u32 block, u32 blk_idx, u32 tbl_idx,
 				   struct mdp_csc_cfg *data)
 {

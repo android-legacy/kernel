@@ -374,7 +374,7 @@ int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	struct mdss_mdp_prefill_params prefill_params;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
-	if (!pipe || !perf || !pipe->mixer_left || !mdata)
+	if (!pipe || !perf || !pipe->mixer_left)
 		return -EINVAL;
 
 	mixer = pipe->mixer_left;
@@ -513,8 +513,8 @@ static void mdss_mdp_perf_calc_mixer(struct mdss_mdp_mixer *mixer,
 	int i;
 	u32 max_clk_rate = 0;
 	u64 bw_overlap_max = 0;
-	u64 bw_overlap[MDSS_MDP_MAX_STAGE] = { 0 };
-	u32 v_region[MDSS_MDP_MAX_STAGE * 2] = { 0 };
+	u64 bw_overlap[MAX_PIPES_PER_LM] = { 0 };
+	u32 v_region[MAX_PIPES_PER_LM * 2] = { 0 };
 	u32 prefill_bytes = 0;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	bool apply_fudge = true;
@@ -522,7 +522,7 @@ static void mdss_mdp_perf_calc_mixer(struct mdss_mdp_mixer *mixer,
 
 	BUG_ON(num_pipes > MAX_PIPES_PER_LM);
 
-	BUG_ON(num_pipes > MDSS_MDP_MAX_STAGE);
+	BUG_ON(num_pipes > MAX_PIPES_PER_LM);
 
 	memset(perf, 0, sizeof(*perf));
 
@@ -546,14 +546,6 @@ static void mdss_mdp_perf_calc_mixer(struct mdss_mdp_mixer *mixer,
 			perf->bw_overlap =
 				fps * mixer->width * mixer->height * 3;
 	}
-
-	/*
-	 * In case of border color, we still need enough mdp clock
-	 * to avoid under-run. Clock requirement for border color is
-	 * based on mixer width.
-	 */
-	if (num_pipes == 0)
-		goto exit;
 
 	memset(bw_overlap, 0, sizeof(u64) * MAX_PIPES_PER_LM);
 	memset(v_region, 0, sizeof(u32) * MAX_PIPES_PER_LM * 2);
@@ -598,7 +590,6 @@ static void mdss_mdp_perf_calc_mixer(struct mdss_mdp_mixer *mixer,
 			apply_fudge, (num_pipes == 1)))
 			continue;
 
-		bw_vote_mode |= tmp.bw_vote_mode;
 		prefill_bytes += tmp.prefill_bytes;
 		bw_overlap[i] = tmp.bw_overlap;
 		v_region[2*i] = pipe->dst.y;
@@ -779,8 +770,8 @@ int mdss_mdp_perf_bw_check(struct mdss_mdp_ctl *ctl,
 int mdss_mdp_perf_bw_check_pipe(struct mdss_mdp_perf_params *perf,
 		struct mdss_mdp_pipe *pipe)
 {
-	struct mdss_data_type *mdata = pipe->mixer->ctl->mdata;
-	struct mdss_mdp_ctl *ctl = pipe->mixer->ctl;
+	struct mdss_data_type *mdata = pipe->mixer_left->ctl->mdata;
+	struct mdss_mdp_ctl *ctl = pipe->mixer_left->ctl;
 	u32 vbp_fac, threshold;
 	u64 prefill_bw, pipe_bw;
 
@@ -818,8 +809,8 @@ static void mdss_mdp_perf_calc_ctl(struct mdss_mdp_ctl *ctl,
 	right_plist = ctl->mixer_right ? ctl->mixer_right->stage_pipe : NULL;
 
 	__mdss_mdp_perf_calc_ctl_helper(ctl, perf,
-			left_plist, (left_plist ? MDSS_MDP_MAX_STAGE : 0),
-			right_plist, (right_plist ? MDSS_MDP_MAX_STAGE : 0));
+			left_plist, (left_plist ? MAX_PIPES_PER_LM : 0),
+			right_plist, (right_plist ? MAX_PIPES_PER_LM : 0));
 
 	/* we only need bandwidth check on real-time clients (interfaces) */
 	if (ctl->intf_type == MDSS_MDP_NO_INTF)
@@ -2319,42 +2310,6 @@ static inline u32 mdss_mdp_mpq_pipe_num_map(u32 pipe_num)
 	return mpq_num;
 }
 
-void mdss_mdp_set_roi(struct mdss_mdp_ctl *ctl,
-		struct mdp_display_commit *data)
-{
-	struct mdss_rect l_roi, r_roi;
-
-	l_roi.x = data->l_roi.x;
-	l_roi.y = data->l_roi.y;
-	l_roi.w = data->l_roi.w;
-	l_roi.h = data->l_roi.h;
-
-	r_roi.x = data->r_roi.x;
-	r_roi.y = data->r_roi.y;
-	r_roi.w = data->r_roi.w;
-	r_roi.h = data->r_roi.h;
-
-	/* Reset ROI when we have (1) invalid ROI (2) feature disabled */
-	if ((!l_roi.w && l_roi.h) || (l_roi.w && !l_roi.h) ||
-		(!r_roi.w && r_roi.h) || (r_roi.w && !r_roi.h) ||
-		(!l_roi.w && !l_roi.h && !r_roi.w && !r_roi.h) ||
-		!ctl->panel_data->panel_info.partial_update_enabled) {
-		l_roi = (struct mdss_rect)
-		{0, 0, ctl->mixer_left->width, ctl->mixer_left->height};
-
-		if (ctl->mixer_right) {
-			r_roi = (struct mdss_rect)
-				{0, 0, ctl->mixer_right->width,
-				ctl->mixer_right->height};
-		}
-	}
-
-	mdss_mdp_set_mixer_roi(ctl, &l_roi);
-
-	if (ctl->mixer_right)
-		mdss_mdp_set_mixer_roi(ctl->mixer_right->ctl, &r_roi);
-}
-
 static void mdss_mdp_mixer_setup(struct mdss_mdp_ctl *master_ctl,
 	int mixer_mux)
 {
@@ -2363,12 +2318,11 @@ static void mdss_mdp_mixer_setup(struct mdss_mdp_ctl *master_ctl,
 	u32 off, blend_op, blend_stage, mpq_num;
 	u32 mixercfg = 0, mixer_op_mode = 0, bg_alpha_enable = 0;
 	u32 fg_alpha = 0, bg_alpha = 0;
-	int stage, secure = 0;
-	int screen_state;
-	int outsize = 0;
-	u32 op_mode;
-
-	screen_state = ctl->force_screen_state;
+	struct mdss_mdp_pipe *pipe;
+	struct mdss_mdp_ctl *ctl = NULL;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	struct mdss_mdp_mixer *mixer = mdss_mdp_mixer_get(master_ctl,
+		mixer_mux);
 
 	if (!mixer)
 		return;
@@ -2376,6 +2330,14 @@ static void mdss_mdp_mixer_setup(struct mdss_mdp_ctl *master_ctl,
 	ctl = mixer->ctl;
 	if (!ctl)
 		return;
+
+	mixer->params_changed = 0;
+	/* check if mixer setup for rotator is needed */
+	if (mixer->rotator_mode) {
+		off = __mdss_mdp_ctl_get_mixer_off(mixer);
+		mdss_mdp_ctl_write(mixer->ctl, off, 0);
+		return;
+	}
 
 	mixer->params_changed = 0;
 	/* check if mixer setup for rotator is needed */
@@ -2529,12 +2491,14 @@ update_mixer:
 	else
 		ctl->flush_bits |= BIT(6) << mixer->num;
 
-	op_mode = mdp_mixer_read(mixer, MDSS_MDP_REG_LM_OP_MODE);
 	/* Read GC enable/disable status on LM */
-	op_mode = (op_mode & BIT(0));
-	blend_color_out |= op_mode;
+	mixer_op_mode |=
+		(mdp_mixer_read(mixer, MDSS_MDP_REG_LM_OP_MODE) & BIT(0));
 
-	mdp_mixer_write(mixer, MDSS_MDP_REG_LM_OP_MODE, blend_color_out);
+	if (mdata->has_src_split && mixer_mux == MDSS_MDP_MIXER_MUX_RIGHT)
+		mixer_op_mode |= BIT(31);
+
+	mdp_mixer_write(mixer, MDSS_MDP_REG_LM_OP_MODE, mixer_op_mode);
 	off = __mdss_mdp_ctl_get_mixer_off(mixer);
 	mdss_mdp_ctl_write(ctl, off, mixercfg);
 }
@@ -2721,21 +2685,9 @@ int mdss_mdp_mixer_pipe_update(struct mdss_mdp_pipe *pipe,
 
 	if (params_changed) {
 		mixer->params_changed++;
-		for (i = MDSS_MDP_STAGE_UNUSED; i < MDSS_MDP_MAX_STAGE; i++) {
+		for (i = MDSS_MDP_STAGE_BASE; i < MDSS_MDP_MAX_STAGE; i++) {
 			j = i * MAX_PIPES_PER_STAGE;
-
-			/*
-			 * 1. If pipe is on the right side of the blending
-			 *    stage, on either left LM or right LM but it is not
-			 *    crossing LM boundry then left_blend index is used.
-			 * 2. If pipe is on the right side of the blending
-			 *    stage, on left LM and it is crossing LM boundry
-			 *    then for left LM it is placed into right_blend
-			 *    index but for right LM it still placed into
-			 *    left_blend index.
-			 */
-			if (pipe->is_right_blend && (!pipe->src_split_req ||
-			    (pipe->src_split_req && !mixer->is_right_mixer)))
+			if (pipe->is_right_blend)
 				j++;
 
 			if (i == pipe->mixer_stage)
@@ -2761,47 +2713,18 @@ int mdss_mdp_mixer_pipe_update(struct mdss_mdp_pipe *pipe,
 	return 0;
 }
 
-/**
- * mdss_mdp_mixer_unstage_all() - Unstage all pipes from mixer
- * @mixer:	Mixer from which to unstage all pipes
- *
- * Unstage any pipes that are currently attached to mixer.
- *
- * NOTE: this will not update the pipe structure, and thus a full
- * deinitialization or reconfiguration of all pipes is expected after this call.
- */
-void mdss_mdp_mixer_unstage_all(struct mdss_mdp_mixer *mixer)
-{
-	struct mdss_mdp_pipe *tmp;
-	int i;
-
-	if (!mixer)
-		return;
-
-	for (i = 0; i < MAX_PIPES_PER_LM; i++) {
-		tmp = mixer->stage_pipe[i];
-		if (tmp) {
-			mixer->stage_pipe[i] = NULL;
-			mixer->params_changed++;
-			tmp->params_changed++;
-		}
-	}
-}
-
 int mdss_mdp_mixer_pipe_unstage(struct mdss_mdp_pipe *pipe,
 	struct mdss_mdp_mixer *mixer)
 {
 	int index;
-	u8 right_blend_index;
 
 	if (!pipe)
 		return -EINVAL;
 	if (!mixer)
 		return -EINVAL;
 
-	right_blend_index = pipe->is_right_blend &&
-		!(pipe->src_split_req && mixer->is_right_mixer);
-	index = (pipe->mixer_stage * MAX_PIPES_PER_STAGE) + right_blend_index;
+	index = (pipe->mixer_stage * MAX_PIPES_PER_STAGE) +
+		(int)pipe->is_right_blend;
 
 	if (pipe == mixer->stage_pipe[index]) {
 		pr_debug("unstage p%d from %s side of stage=%d lm=%d ndx=%d\n",
@@ -2810,6 +2733,11 @@ int mdss_mdp_mixer_pipe_unstage(struct mdss_mdp_pipe *pipe,
 
 		mixer->params_changed++;
 		mixer->stage_pipe[index] = NULL;
+
+		if (mixer->is_right_mixer)
+			pipe->mixer_right = NULL;
+		else
+			pipe->mixer_left = NULL;
 	}
 
 	return 0;
@@ -2985,31 +2913,9 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 
 	sctl = mdss_mdp_get_split_ctl(ctl);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
-
-	/*
-	 * We could have released the bandwidth if there were no transactions
-	 * pending, so we want to re-calculate the bandwidth in this situation
-	 */
-	is_bw_released = !mdss_mdp_ctl_perf_get_transaction_status(ctl);
-	if (is_bw_released) {
-		if (sctl)
-			is_bw_released =
-				!mdss_mdp_ctl_perf_get_transaction_status(sctl);
-	}
-
-	mdss_mdp_ctl_perf_set_transaction_status(ctl,
-			PERF_SW_COMMIT_STATE, PERF_STATUS_BUSY);
-
-	if (sctl && sctl->roi.w && sctl->roi.h) {
-		/* left + right*/
-		mdss_mdp_ctl_perf_set_transaction_status(sctl,
-			PERF_SW_COMMIT_STATE, PERF_STATUS_BUSY);
-	}
-
-	if (is_bw_released || ctl->force_screen_state ||
+	if (ctl->force_screen_state ||
 		(ctl->mixer_left && ctl->mixer_left->params_changed) ||
 		(ctl->mixer_right && ctl->mixer_right->params_changed)) {
-		ATRACE_BEGIN("prepare_fnc");
 		if (ctl->prepare_fnc)
 			ret = ctl->prepare_fnc(ctl, arg);
 		ATRACE_END("prepare_fnc");

@@ -71,6 +71,22 @@ static inline u32 left_lm_w_from_mfd(struct msm_fb_data_type *mfd)
 	return ctl->mixer_left->width;
 }
 
+static int mdss_mdp_overlay_sd_ctrl(struct msm_fb_data_type *mfd,
+					unsigned int enable)
+{
+	return (((left_blend->x + left_blend->w) == right_blend->x)	&&
+		((left_blend->x + left_blend->w) != left_lm_w)		&&
+		(left_blend->x != right_blend->x)			&&
+		(left_blend->y == right_blend->y)			&&
+		(left_blend->h == right_blend->h));
+}
+
+static inline u32 left_lm_w_from_mfd(struct msm_fb_data_type *mfd)
+{
+	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+	return ctl->mixer_left->width;
+}
+
 /**
  * __is_more_decimation_doable() -
  * @pipe: pointer to pipe data structure
@@ -144,6 +160,76 @@ static int mdss_mdp_overlay_get(struct msm_fb_data_type *mfd,
 	}
 
 	*req = pipe->req_data;
+
+	return 0;
+}
+
+static int mdss_mdp_ov_xres_check(struct msm_fb_data_type *mfd,
+	struct mdp_overlay *req)
+{
+	u32 xres = 0;
+	u32 left_lm_w = left_lm_w_from_mfd(mfd);
+	struct mdss_data_type *mdata = mfd_to_mdata(mfd);
+	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+
+	if (IS_RIGHT_MIXER_OV(req->flags, req->dst_rect.x, left_lm_w)) {
+		if (mdata->has_src_split) {
+			xres = left_lm_w;
+
+			if (req->flags & MDSS_MDP_RIGHT_MIXER) {
+				pr_warn("invalid use of RIGHT_MIXER flag.\n");
+				/*
+				 * if chip-set is capable of source split then
+				 * all layers which are only on right LM should
+				 * have their x offset relative to left LM's
+				 * left-top or in other words relative to
+				 * panel width.
+				 * By modifying dst_x below, we are assuming
+				 * that client is running in legacy mode
+				 * chipset capable of source split.
+				 */
+				if (req->dst_rect.x < left_lm_w)
+					req->dst_rect.x += left_lm_w;
+
+				req->flags &= ~MDSS_MDP_RIGHT_MIXER;
+			}
+		} else if (req->dst_rect.x >= left_lm_w) {
+			/*
+			 * this is a step towards removing a reliance on
+			 * MDSS_MDP_RIGHT_MIXER flags. With the new src split
+			 * code, some clients of non-src-split chipsets have
+			 * stopped sending MDSS_MDP_RIGHT_MIXER flag and
+			 * modified their xres relative to full panel
+			 * dimensions. In such cases, we need to deduct left
+			 * layer mixer width before we programm this HW.
+			 */
+			req->dst_rect.x -= left_lm_w;
+			req->flags |= MDSS_MDP_RIGHT_MIXER;
+		}
+
+		if (ctl->mixer_right) {
+			xres += ctl->mixer_right->width;
+		} else {
+			pr_err("ov cannot be placed on right mixer\n");
+			return -EPERM;
+		}
+	} else {
+		if (ctl->mixer_left) {
+			xres = ctl->mixer_left->width;
+		} else {
+			pr_err("ov cannot be placed on left mixer\n");
+			return -EPERM;
+		}
+
+		if (mdata->has_src_split && ctl->mixer_right)
+			xres += ctl->mixer_right->width;
+	}
+
+	if (CHECK_BOUNDS(req->dst_rect.x, req->dst_rect.w, xres)) {
+		pr_err("dst_xres is invalid. dst_x:%d, dst_w:%d, xres:%d\n",
+			req->dst_rect.x, req->dst_rect.w, xres);
+		return -EOVERFLOW;
+	}
 
 	return 0;
 }
@@ -547,9 +633,9 @@ static inline void __mdss_mdp_overlay_set_chroma_sample(
 		pipe->chroma_sample_v = 0;
 }
 
-int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
+static int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	struct mdp_overlay *req, struct mdss_mdp_pipe **ppipe,
-	struct mdss_mdp_pipe *left_blend_pipe, bool is_single_layer)
+	struct mdss_mdp_pipe *left_blend_pipe)
 {
 	struct mdss_mdp_format_params *fmt;
 	struct mdss_mdp_pipe *pipe;
@@ -679,9 +765,9 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 			return ret;
 		}
 
-		mutex_lock(&mdp5_data->list_lock);
-		list_add(&pipe->list, &mdp5_data->pipes_used);
-		mutex_unlock(&mdp5_data->list_lock);
+		mutex_lock(&mfd->lock);
+		list_add(&pipe->used_list, &mdp5_data->pipes_used);
+		mutex_unlock(&mfd->lock);
 		pipe->mixer_left = mixer;
 		pipe->mfd = mfd;
 		pipe->pid = current->tgid;
@@ -721,6 +807,14 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 			mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_left);
 			pipe->mixer_left = mixer;
 		}
+	} else if (pipe->is_right_blend) {
+		/*
+		 * pipe used to be right blend need to update mixer
+		 * configuration to remove it as a right blend
+		 */
+		mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_left);
+		mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_right);
+		pipe->is_right_blend = false;
 	}
 
 	if (left_blend_pipe) {
@@ -734,10 +828,6 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 			pipe->is_right_blend = true;
 		}
 	} else if (pipe->is_right_blend) {
-		/*
-		 * pipe used to be right blend need to update mixer
-		 * configuration to remove it as a right blend
-		 */
 		mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_left);
 		mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_right);
 		pipe->is_right_blend = false;
@@ -785,11 +875,9 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 				pipe->src_split_req = true;
 			}
 		} else {
-			if (pipe->src_split_req) {
+			if (pipe->src_split_req)
 				mdss_mdp_mixer_pipe_unstage(pipe,
 					pipe->mixer_right);
-				pipe->mixer_right = NULL;
-			}
 			pipe->src_split_req = false;
 		}
 	}
@@ -974,7 +1062,7 @@ static int mdss_mdp_overlay_set(struct msm_fb_data_type *mfd,
 		/* userspace zorder start with stage 0 */
 		req->z_order += MDSS_MDP_STAGE_0;
 
-		ret = mdss_mdp_overlay_pipe_setup(mfd, req, &pipe, NULL, false);
+		ret = mdss_mdp_overlay_pipe_setup(mfd, req, &pipe, NULL);
 
 		req->z_order -= MDSS_MDP_STAGE_0;
 	}
@@ -1053,6 +1141,7 @@ static void mdss_mdp_overlay_cleanup(struct msm_fb_data_type *mfd)
 	list_for_each_entry_safe(pipe, tmp, &destroy_pipes, cleanup_list) {
 		__mdss_mdp_overlay_free_list_add(mfd, &pipe->front_buf);
 		mdss_mdp_overlay_free_buf(&pipe->back_buf);
+		list_del_init(&pipe->cleanup_list);
 		mdss_mdp_pipe_destroy(pipe);
 	}
 	mutex_unlock(&mfd->lock);
@@ -1088,7 +1177,8 @@ void mdss_mdp_handoff_cleanup_pipes(struct msm_fb_data_type *mfd,
 		pipe = &pipes[i];
 		if (pipe->is_handed_off) {
 			pr_debug("Unmapping handed off pipe %d\n", pipe->num);
-			list_add(&pipe->list, &mdp5_data->pipes_cleanup);
+			list_add(&pipe->cleanup_list,
+				&mdp5_data->pipes_cleanup);
 			mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_left);
 			pipe->is_handed_off = false;
 		}
@@ -1257,7 +1347,8 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 	 */
 	list_for_each_entry(pipe, &mdp5_data->pipes_cleanup, cleanup_list) {
 		mdss_mdp_pipe_queue_data(pipe, NULL);
-		mdss_mdp_mixer_pipe_unstage(pipe);
+		mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_left);
+		mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_right);
 	}
 
 	list_for_each_entry(pipe, &mdp5_data->pipes_used, used_list) {
@@ -1282,7 +1373,7 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 		    (ctl->mdata->wfd_mode == MDSS_MDP_WFD_SHARED))) {
 			if (ctl->mdata->mixer_switched) {
 				ret = mdss_mdp_overlay_pipe_setup(mfd,
-					&pipe->req_data, &pipe, NULL, false);
+					&pipe->req_data, &pipe, NULL);
 				pr_debug("reseting DMA pipe for ctl=%d",
 					 ctl->num);
 			}
@@ -1294,8 +1385,11 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 
 			tmp = mdss_mdp_ctl_mixer_switch(ctl,
 					MDSS_MDP_WB_CTL_TYPE_LINE);
-			if (!tmp)
-				return -EINVAL;
+			if (!tmp) {
+				mutex_unlock(&mfd->lock);
+				ret = -EINVAL;
+				goto commit_fail;
+			}
 			pipe->mixer_left = mdss_mdp_mixer_get(tmp,
 					MDSS_MDP_MIXER_MUX_DEFAULT);
 		}
@@ -1330,7 +1424,6 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 			pr_warn("Unable to queue data for pnum=%d\n",
 					pipe->num);
 			mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_left);
-			mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_right);
 		}
 	}
 
@@ -1834,36 +1927,62 @@ static int mdss_mdp_overlay_get_fb_pipe(struct msm_fb_data_type *mfd,
 
 		memset(&req, 0, sizeof(req));
 
-		bpp = fbi->var.bits_per_pixel / 8;
-		req.id = MSMFB_NEW_REQUEST;
-		req.src.format = mfd->fb_imgType;
-		req.src.height = fbi->var.yres;
-		req.src.width = fbi->fix.line_length / bpp;
-		if (mixer_mux == MDSS_MDP_MIXER_MUX_RIGHT) {
-			if (req.src.width <= mixer->width) {
-				pr_warn("right fb pipe not needed\n");
-				return -EINVAL;
+			bpp = fbi->var.bits_per_pixel / 8;
+			req.id = MSMFB_NEW_REQUEST;
+			req.src.format = mfd->fb_imgType;
+			req.src.height = fbi->var.yres;
+			req.src.width = fbi->fix.line_length / bpp;
+			if (mixer_mux == MDSS_MDP_MIXER_MUX_RIGHT) {
+				if (req.src.width <= mixer->width) {
+					pr_warn("right fb pipe not needed\n");
+					return -EINVAL;
+				}
+
+				req.src_rect.x = mixer->width;
+				req.src_rect.w = fbi->var.xres - mixer->width;
+			} else {
+				req.src_rect.x = 0;
+				req.src_rect.w = MIN(fbi->var.xres,
+								mixer->width);
 			}
 
-			req.src_rect.x = mixer->width;
-			req.src_rect.w = fbi->var.xres - mixer->width;
-		} else {
-			req.src_rect.x = 0;
-			req.src_rect.w = MIN(fbi->var.xres,
-							mixer->width);
-		}
+			req.src_rect.y = 0;
+			req.src_rect.h = req.src.height;
+			req.dst_rect = req.src_rect;
+			req.z_order = MDSS_MDP_STAGE_BASE;
 
 		req.src_rect.y = 0;
 		req.src_rect.h = req.src.height;
 		req.dst_rect = req.src_rect;
 		req.z_order = MDSS_MDP_STAGE_BASE;
 
-		pr_debug("allocating base pipe mux=%d\n", mixer_mux);
+			ret = mdss_mdp_overlay_pipe_setup(mfd, &req, &pipe,
+				NULL);
+			if (ret)
+				return ret;
+		} else {
+			if (mixer_mux == MDSS_MDP_MIXER_MUX_RIGHT) {
+				req_ov->id = MSMFB_NEW_REQUEST;
+				req_ov->src_rect.w = MIN(mixer->width,
+						req_ov->src_rect.w >> 1);
+				req_ov->dst_rect.w = req_ov->src_rect.w;
+				req_ov->src_rect.x = req_ov->src_rect.w;
+				/*
+				 * following dst_x assigment will have two
+				 * different outcomes depending on the chipset's
+				 * source split capability. If non-src-split
+				 * chip-set then left mixer width will be
+				 * deducted from dst_x later on inside
+				 * mdss_mdp_ov_xres_check function.
+				 */
+				req_ov->dst_rect.x = mixer->width;
+			}
 
-		ret = mdss_mdp_overlay_pipe_setup(mfd, &req, &pipe, NULL,
-			false);
-		if (ret)
-			return ret;
+			ret = mdss_mdp_overlay_pipe_setup(mfd, req_ov, &pipe,
+				NULL);
+			if (ret)
+				return ret;
+		}
 	}
 	pr_debug("ctl=%d pnum=%d\n", mdp5_data->ctl->num, pipe->num);
 
@@ -2808,9 +2927,8 @@ static int __mdss_overlay_map(struct mdp_overlay *ovs,
 			if ((ovs[j].dst_rect.x == op_ovs[k].dst_rect.x) &&
 			    (ovs[j].z_order == op_ovs[k].z_order)) {
 				op_ovs[k].id = ovs[j].id;
-				op_ovs[k].priority = ovs[j].priority;
 				break;
-			}
+		    }
 		}
 		if ((i != num_ovs) && (i != j) &&
 		    (ovs[j].dst_rect.x == op_ovs[k].dst_rect.x) &&
@@ -2882,14 +3000,22 @@ static int __mdss_overlay_src_split_sort(struct msm_fb_data_type *mfd,
 static int __handle_overlay_prepare(struct msm_fb_data_type *mfd,
 	struct mdp_overlay_list *ovlist, struct mdp_overlay *ip_ovs)
 {
-	struct mdss_mdp_pipe *right_plist[MDSS_MDP_MAX_STAGE] = { 0 };
-	struct mdss_mdp_pipe *left_plist[MDSS_MDP_MAX_STAGE] = { 0 };
+	int ret, i;
+	int new_reqs = 0, left_cnt = 0, right_cnt = 0;
+	int num_ovs = ovlist->num_overlays;
+	u32 left_lm_w = left_lm_w_from_mfd(mfd);
+
+	struct mdss_data_type *mdata = mfd_to_mdata(mfd);
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-	struct mdss_mdp_pipe *pipe;
-	struct mdp_overlay *req;
-	int ret = 0, left_cnt = 0, right_cnt = 0;
-	int i;
-	u32 new_reqs = 0;
+
+	struct mdp_overlay *sorted_ovs = NULL;
+	struct mdp_overlay *req, *prev_req;
+
+	struct mdss_mdp_pipe *pipe, *left_blend_pipe;
+	struct mdss_mdp_pipe *right_plist[MAX_PIPES_PER_LM] = { 0 };
+	struct mdss_mdp_pipe *left_plist[MAX_PIPES_PER_LM] = { 0 };
+
+	bool sort_needed = mdata->has_src_split && (num_ovs > 1);
 
 	ret = mutex_lock_interruptible(&mdp5_data->ov_lock);
 	if (ret)
@@ -2918,17 +3044,6 @@ static int __handle_overlay_prepare(struct msm_fb_data_type *mfd,
 	pr_debug("prepare fb%d num_ovs=%d\n", mfd->index, num_ovs);
 
 	for (i = 0; i < num_ovs; i++) {
-		if (IS_RIGHT_MIXER_OV(ip_ovs[i].flags, ip_ovs[i].dst_rect.x,
-			left_lm_w))
-			right_lm_ovs++;
-		else
-			left_lm_ovs++;
-
-		if ((left_lm_ovs > 1) && (right_lm_ovs > 1))
-			break;
-	}
-
-	for (i = 0; i < num_ovs; i++) {
 		left_blend_pipe = NULL;
 
 		if (sort_needed) {
@@ -2950,15 +3065,9 @@ static int __handle_overlay_prepare(struct msm_fb_data_type *mfd,
 			req = &ip_ovs[i];
 		}
 
-		if (IS_RIGHT_MIXER_OV(ip_ovs[i].flags, ip_ovs[i].dst_rect.x,
-			left_lm_w))
-			is_single_layer = (right_lm_ovs == 1);
-		else
-			is_single_layer = (left_lm_ovs == 1);
-
 		req->z_order += MDSS_MDP_STAGE_0;
 		ret = mdss_mdp_overlay_pipe_setup(mfd, req, &pipe,
-			left_blend_pipe, is_single_layer);
+			left_blend_pipe);
 		req->z_order -= MDSS_MDP_STAGE_0;
 
 		if (IS_ERR_VALUE(ret))
@@ -2972,8 +3081,8 @@ static int __handle_overlay_prepare(struct msm_fb_data_type *mfd,
 		if (pipe->play_cnt == 0)
 			new_reqs |= pipe->ndx;
 
-		if (pipe->flags & MDSS_MDP_RIGHT_MIXER) {
-			if (right_cnt >= MDSS_MDP_MAX_STAGE) {
+		if (IS_RIGHT_MIXER_OV(pipe->flags, pipe->dst.x, left_lm_w)) {
+			if (right_cnt >= MAX_PIPES_PER_LM) {
 				pr_err("too many pipes on right mixer\n");
 				ret = -EINVAL;
 				goto validate_exit;
@@ -2981,7 +3090,7 @@ static int __handle_overlay_prepare(struct msm_fb_data_type *mfd,
 			right_plist[right_cnt] = pipe;
 			right_cnt++;
 		} else {
-			if (left_cnt >= MDSS_MDP_MAX_STAGE) {
+			if (left_cnt >= MAX_PIPES_PER_LM) {
 				pr_err("too many pipes on left mixer\n");
 				ret = -EINVAL;
 				goto validate_exit;
@@ -3002,9 +3111,8 @@ validate_exit:
 		ovlist->processed_overlays = i;
 
 	if (IS_ERR_VALUE(ret)) {
-		pr_debug("err=%d total_ovs:%d processed:%d left:%d right:%d\n",
-			ret, num_ovs, ovlist->processed_overlays, left_lm_ovs,
-			right_lm_ovs);
+		pr_debug("err=%d total_ovs:%d processed:%d\n",
+			ret, num_ovs, ovlist->processed_overlays);
 		mdss_mdp_overlay_release(mfd, new_reqs);
 	}
 	mutex_unlock(&mdp5_data->ov_lock);

@@ -2434,9 +2434,6 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 
 	mdata->has_src_split = of_property_read_bool(pdev->dev.of_node,
 		 "qcom,mdss-has-source-split");
-	mdata->idle_pc_enabled = of_property_read_bool(pdev->dev.of_node,
-		 "qcom,mdss-idle-power-collapse-enabled");
-
 	prop = of_find_property(pdev->dev.of_node, "batfet-supply", NULL);
 	mdata->batfet_required = prop ? true : false;
 	rc = of_property_read_u32(pdev->dev.of_node,
