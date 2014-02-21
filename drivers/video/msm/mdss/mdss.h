@@ -214,14 +214,7 @@ struct mdss_data_type {
 	struct mdss_prefill_data prefill_data;
 
 	int handoff_pending;
-	bool idle_pc;
-	struct mdss_perf_tune perf_tune;
-	bool traffic_shaper_en;
-	int iommu_ref_cnt;
-	atomic_t active_intf_cnt;
-
-	u64 ab[MDSS_MAX_HW_BLK];
-	u64 ib[MDSS_MAX_HW_BLK];
+	bool ulps;
 };
 extern struct mdss_data_type *mdss_res;
 
