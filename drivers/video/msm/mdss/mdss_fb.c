@@ -1305,6 +1305,7 @@ static int mdss_fb_open(struct fb_info *info, int user)
 	struct mdss_fb_proc_info *pinfo = NULL;
 	int result;
 	int pid = current->tgid;
+	struct task_struct *task = current->group_leader;
 
 //S [VVVV] JackBB 2013/11/7
   if(user == 0)
@@ -1314,7 +1315,8 @@ static int mdss_fb_open(struct fb_info *info, int user)
 //E [VVVV] JackBB 2013/11/7
 
 	if (mfd->shutdown_pending) {
-		pr_err("Shutdown pending. Aborting operation\n");
+		pr_err("Shutdown pending. Aborting operation. Request from pid:%d name=%s\n",
+				pid, task->comm);
 		return -EPERM;
 	}
 
