@@ -1136,9 +1136,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 error_pan_node:
 	of_node_put(dsi_pan_node);
 error_vreg:
-	for (; i >= 0; i--)
-		mdss_dsi_put_dt_vreg_data(&pdev->dev,
-			&ctrl_pdata->power_data[i]);
+	mdss_dsi_put_dt_vreg_data(&pdev->dev, &ctrl_pdata->power_data);
 error_no_mem:
 	devm_kfree(&pdev->dev, ctrl_pdata);
 
@@ -1167,9 +1165,6 @@ static int mdss_dsi_ctrl_remove(struct platform_device *pdev)
 	}
 
 	mfd = platform_get_drvdata(pdev);
-	msm_dss_iounmap(&ctrl_pdata->mmss_misc_io);
-	msm_dss_iounmap(&ctrl_pdata->phy_io);
-	msm_dss_iounmap(&ctrl_pdata->ctrl_io);
 	return 0;
 }
 
