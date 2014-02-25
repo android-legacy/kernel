@@ -400,8 +400,7 @@ static int __mdp_pipe_tune_perf(struct mdss_mdp_pipe *pipe,
 		 * mdp clock requirement
 		 */
 		if (mdata->has_decimation && (pipe->vert_deci < MAX_DECIMATION)
-			&& !pipe->bwc_mode && !pipe->src_fmt->tile &&
-			!pipe->scale.enable_pxl_ext)
+			&& !pipe->bwc_mode && !pipe->src_fmt->tile)
 			pipe->vert_deci++;
 		else
 			return -E2BIG;
