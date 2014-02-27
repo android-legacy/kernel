@@ -1215,6 +1215,11 @@ static int __overlay_queue_pipes(struct msm_fb_data_type *mfd)
 	struct mdss_mdp_ctl *tmp;
 	int ret = 0;
 
+	if (!ctl) {
+		pr_warn("kickoff on fb=%d without a ctl attched\n", mfd->index);
+		return ret;
+	}
+
 	if (ctl->shared_lock)
 		mutex_lock(ctl->shared_lock);
 
