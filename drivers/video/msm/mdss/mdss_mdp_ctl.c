@@ -820,77 +820,6 @@ static void mdss_mdp_perf_calc_ctl(struct mdss_mdp_ctl *ctl,
 		 perf->bw_overlap, perf->bw_prefill, perf->prefill_bytes);
 }
 
-int mdss_mdp_perf_bw_check_pipe(struct mdss_mdp_perf_params *perf,
-		struct mdss_mdp_pipe *pipe)
-{
-	struct mdss_data_type *mdata = pipe->mixer_left->ctl->mdata;
-	struct mdss_mdp_ctl *ctl = pipe->mixer_left->ctl;
-	u32 vbp_fac, threshold;
-	u64 prefill_bw, pipe_bw;
-
-	/* we only need bandwidth check on real-time clients (interfaces) */
-	if (ctl->intf_type == MDSS_MDP_NO_INTF)
-		return 0;
-
-	vbp_fac = mdss_mdp_get_vbp_factor_max(ctl);
-	prefill_bw = perf->prefill_bytes * vbp_fac;
-	pipe_bw = max(prefill_bw, perf->bw_overlap);
-	pr_debug("prefill=%llu, vbp_fac=%u, overlap=%llu\n",
-			prefill_bw, vbp_fac, perf->bw_overlap);
-
-	/* convert bandwidth to kb */
-	pipe_bw = DIV_ROUND_UP_ULL(pipe_bw, 1000);
-
-	threshold = mdata->max_bw_per_pipe;
-	pr_debug("bw=%llu threshold=%u\n", pipe_bw, threshold);
-
-	if (threshold && pipe_bw > threshold) {
-		pr_debug("pipe exceeds bandwidth: %llukb > %ukb\n", pipe_bw,
-				threshold);
-		return -E2BIG;
-	}
-
-	return 0;
-}
-
-static void mdss_mdp_perf_calc_ctl(struct mdss_mdp_ctl *ctl,
-		struct mdss_mdp_perf_params *perf)
-{
-	struct mdss_mdp_pipe *left_plist[MAX_PIPES_PER_LM];
-	struct mdss_mdp_pipe *right_plist[MAX_PIPES_PER_LM];
-	int i, left_cnt = 0, right_cnt = 0;
-
-	for (i = 0; i < MAX_PIPES_PER_LM; i++) {
-		if (ctl->mixer_left && ctl->mixer_left->stage_pipe[i]) {
-			left_plist[left_cnt] =
-					ctl->mixer_left->stage_pipe[i];
-			left_cnt++;
-		}
-
-		if (ctl->mixer_right && ctl->mixer_right->stage_pipe[i]) {
-			right_plist[right_cnt] =
-					ctl->mixer_right->stage_pipe[i];
-			right_cnt++;
-		}
-	}
-
-	__mdss_mdp_perf_calc_ctl_helper(ctl, perf,
-		left_plist, left_cnt, right_plist, right_cnt);
-
-	if (ctl->is_video_mode) {
-		if (perf->bw_overlap > perf->bw_prefill)
-			perf->bw_ctl = apply_fudge_factor(perf->bw_ctl,
-				&mdss_res->ib_factor_overlap);
-		else
-			perf->bw_ctl = apply_fudge_factor(perf->bw_ctl,
-				&mdss_res->ib_factor);
-	}
-	pr_debug("ctl=%d clk_rate=%u\n", ctl->num, perf->mdp_clk_rate);
-	pr_debug("bw_overlap=%llu bw_prefill=%llu prefill_bytes=%d mode:%d\n",
-		 perf->bw_overlap, perf->bw_prefill, perf->prefill_bytes,
-		 perf->bw_vote_mode);
-}
-
 static void set_status(u32 *value, bool status, u32 bit_num)
 {
 	if (status)
@@ -974,17 +903,6 @@ u32 mdss_mdp_ctl_perf_get_transaction_status(struct mdss_mdp_ctl *ctl)
 	unsigned long flags;
 	u32 transaction_status;
 
-	if (!ctl)
-		return PERF_STATUS_BUSY;
-
-	/*
-	 * If Rotator mode and bandwidth has been released; return STATUS_DONE
-	 * so the bandwidth is re-calculated.
-	 */
-	if (ctl->mixer_left && ctl->mixer_left->rotator_mode &&
-		!ctl->perf_release_ctl_bw)
-			return PERF_STATUS_DONE;
-
 	/*
 	 * If Video Mode or not valid data to determine the status, return busy
 	 * status, so the bandwidth cannot be freed by the caller
@@ -999,26 +917,6 @@ u32 mdss_mdp_ctl_perf_get_transaction_status(struct mdss_mdp_ctl *ctl)
 	spin_unlock_irqrestore(&ctl->spin_lock, flags);
 
 	return transaction_status;
-}
-
-static inline void mdss_mdp_ctl_perf_bus_override(struct mdss_data_type *mdata,
-	u64 *bus_ib_quota, u32 bw_vote_mode)
-{
-	if (MDSS_MDP_BW_MODE_UHD & bw_vote_mode) {
-		if (mdata->perf_tune.min_uhd_bus_vote > 0)
-			*bus_ib_quota = max((*bus_ib_quota),
-				mdata->perf_tune.min_uhd_bus_vote);
-		else
-			*bus_ib_quota = max((*bus_ib_quota),
-				(u64)5000000000ULL);
-	} else if (MDSS_MDP_BW_MODE_QHD & bw_vote_mode) {
-		if (mdata->perf_tune.min_qhd_bus_vote > 0)
-			*bus_ib_quota = max((*bus_ib_quota),
-				mdata->perf_tune.min_qhd_bus_vote);
-		else
-			*bus_ib_quota = max((*bus_ib_quota),
-				(u64)2500000000ULL);
-	}
 }
 
 /**
@@ -1121,8 +1019,7 @@ void mdss_mdp_ctl_perf_release_bw(struct mdss_mdp_ctl *ctl)
 	for (i = 0; i < mdata->nctl; i++) {
 		struct mdss_mdp_ctl *ctl_local = mdata->ctl_off + i;
 
-		if (mdss_mdp_ctl_is_power_on(ctl_local) &&
-			ctl_local->is_video_mode)
+		if (ctl->power_on && ctl->is_video_mode)
 			goto exit;
 	}
 
@@ -1130,20 +1027,11 @@ void mdss_mdp_ctl_perf_release_bw(struct mdss_mdp_ctl *ctl)
 	pr_debug("transaction_status=0x%x\n", transaction_status);
 
 	/*Release the bandwidth only if there are no transactions pending*/
-	if (!transaction_status && mdata->enable_bw_release) {
-		/*
-		 * for splitdisplay if release_bw is called using secondary
-		 * then find the main ctl and release BW for main ctl because
-		 * BW is always calculated/stored using main ctl.
-		 */
-		struct mdss_mdp_ctl *ctl_local =
-			mdss_mdp_get_main_ctl(ctl) ? : ctl;
-
-		trace_mdp_cmd_release_bw(ctl_local->num);
-		ctl_local->cur_perf.bw_ctl = 0;
-		ctl_local->new_perf.bw_ctl = 0;
-		pr_debug("Release BW ctl=%d\n", ctl_local->num);
-		mdss_mdp_ctl_perf_update_bus(mdata, 0);
+	if (!transaction_status) {
+		ctl->cur_perf.bw_ctl = 0;
+		ctl->new_perf.bw_ctl = 0;
+		pr_debug("Release BW ctl=%d\n", ctl->num);
+		mdss_mdp_ctl_perf_update_bus(ctl);
 	}
 exit:
 	mutex_unlock(&mdss_mdp_ctl_lock);
@@ -1197,7 +1085,6 @@ static void mdss_mdp_ctl_perf_update(struct mdss_mdp_ctl *ctl,
 	int update_bus = 0, update_clk = 0;
 	struct mdss_data_type *mdata;
 	bool is_bw_released;
-	u32 clk_rate = 0;
 
 	if (!ctl || !ctl->mdata)
 		return;
@@ -1210,15 +1097,12 @@ static void mdss_mdp_ctl_perf_update(struct mdss_mdp_ctl *ctl,
 
 	/*
 	 * We could have released the bandwidth if there were no transactions
-	 * pending, so we want to re-calculate the bandwidth in this situation.
+	 * pending, so we want to re-calculate the bandwidth in this situation
 	 */
 	is_bw_released = !mdss_mdp_ctl_perf_get_transaction_status(ctl);
 
-	if (mdss_mdp_ctl_is_power_on(ctl)) {
-		if (ctl->perf_release_ctl_bw &&
-			mdata->enable_rotator_bw_release)
-			mdss_mdp_perf_release_ctl_bw(ctl, new);
-		else if (is_bw_released || params_changed)
+	if (ctl->power_on) {
+		if (is_bw_released || params_changed)
 			mdss_mdp_perf_calc_ctl(ctl, new);
 		/*
 		 * If params have just changed delay the update until
@@ -2906,7 +2790,6 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 	struct mdss_mdp_ctl *sctl = NULL;
 	int ret = 0;
 	bool is_bw_released;
-	int split_enable;
 
 	if (!ctl) {
 		pr_err("display function not set\n");
@@ -2923,7 +2806,16 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 
 	sctl = mdss_mdp_get_split_ctl(ctl);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
-	if (ctl->force_screen_state ||
+
+	/*
+	 * We could have released the bandwidth if there were no transactions
+	 * pending, so we want to re-calculate the bandwidth in this situation
+	 */
+	is_bw_released = !mdss_mdp_ctl_perf_get_transaction_status(ctl);
+	mdss_mdp_ctl_perf_set_transaction_status(ctl, PERF_SW_COMMIT_STATE,
+		PERF_STATUS_BUSY);
+
+	if (is_bw_released || ctl->force_screen_state ||
 		(ctl->mixer_left && ctl->mixer_left->params_changed) ||
 		(ctl->mixer_right && ctl->mixer_right->params_changed)) {
 		if (ctl->prepare_fnc)
