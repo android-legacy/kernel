@@ -13,10 +13,7 @@
 #include <linux/module.h>
 #include <mach/iommu.h>
 #include <linux/ratelimit.h>
-#ifdef CONFIG_MACH_SONY_EAGLE
 #include <asm/div64.h>
-#endif
-
 #include "msm_isp40.h"
 #include "msm_isp_util.h"
 #include "msm_isp_axi_util.h"
@@ -1112,9 +1109,6 @@ static void msm_vfe40_cfg_axi_ub_equal_default(
 	uint8_t num_used_wms = 0;
 	uint32_t prop_size = 0;
 	uint32_t wm_ub_size;
-#ifndef CONFIG_MACH_SONY_EAGLE
-	uint32_t delta;
-#endif
 
 	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
 		if (axi_data->free_wm[i] > 0) {
@@ -1126,19 +1120,11 @@ static void msm_vfe40_cfg_axi_ub_equal_default(
 		axi_data->hw_info->min_wm_ub * num_used_wms;
 	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
 		if (axi_data->free_wm[i]) {
-#ifndef CONFIG_MACH_SONY_EAGLE
-			delta =
-				(axi_data->wm_image_size[i] *
-					prop_size)/total_image_size;
-				((unsigned long long)axi_data->wm_image_size[i]
-					* prop_size) / total_image_size;
-#else
-
 			uint64_t delta = 0;
-            		uint64_t temp = (uint64_t)axi_data->wm_image_size[i]*prop_size;
-            		do_div(temp, total_image_size);
-            		delta = temp;
-#endif
+			uint64_t temp = (uint64_t)axi_data->wm_image_size[i] *
+					(uint64_t)prop_size;
+			do_div(temp, total_image_size);
+			delta = temp;
 			wm_ub_size = axi_data->hw_info->min_wm_ub + delta;
 			msm_camera_io_w(ub_offset << 16 | (wm_ub_size - 1),
 				vfe_dev->vfe_base + VFE40_WM_BASE(i) + 0x10);
@@ -1165,11 +1151,7 @@ static void msm_vfe40_cfg_axi_ub_equal_slicing(
 static void msm_vfe40_cfg_axi_ub(struct vfe_device *vfe_dev)
 {
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
-#ifndef CONFIG_MACH_SONY_EAGLE
-	axi_data->wm_ub_cfg_policy = MSM_WM_UB_EQUAL_SLICING;
-#else
-        axi_data->wm_ub_cfg_policy = MSM_WM_UB_CFG_DEFAULT;
-#endif
+	axi_data->wm_ub_cfg_policy = MSM_WM_UB_CFG_DEFAULT;
 	if (axi_data->wm_ub_cfg_policy == MSM_WM_UB_EQUAL_SLICING)
 		msm_vfe40_cfg_axi_ub_equal_slicing(vfe_dev);
 	else
@@ -1511,13 +1493,8 @@ static void msm_vfe40_get_halt_restart_mask(uint32_t *irq0_mask,
 #endif
 
 static struct msm_vfe_axi_hardware_info msm_vfe40_axi_hw_info = {
-#ifdef CONFIG_MACH_SONY_EAGLE
 	.num_wm = 7,
 	.num_comp_mask = 3,
-#else
-	.num_wm = 5,
-	.num_comp_mask = 2,
-#endif
 	.num_rdi = 3,
 	.num_rdi_master = 3,
 	.min_wm_ub = 64,
