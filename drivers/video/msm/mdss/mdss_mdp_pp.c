@@ -1962,8 +1962,6 @@ int mdss_mdp_pp_init(struct device *dev)
 					hist[i].base =
 						mdss_mdp_get_dspp_addr_off(i) +
 						MDSS_MDP_REG_DSPP_HIST_CTL_BASE;
-					init_completion(&hist[i].comp);
-					init_completion(&hist[i].first_kick);
 				}
 				if (mdata->nmixers_intf == 4)
 					hist[3].intr_shift = 22;
@@ -1980,8 +1978,6 @@ int mdss_mdp_pp_init(struct device *dev)
 			vig[i].pp_res.hist.intr_shift = (vig[i].num * 4);
 			vig[i].pp_res.hist.base = vig[i].base +
 				MDSS_MDP_REG_VIG_HIST_CTL_BASE;
-			init_completion(&vig[i].pp_res.hist.comp);
-			init_completion(&vig[i].pp_res.hist.first_kick);
 		}
 		if (!mdata->pp_bus_hdl) {
 			pp_bus_pdata = &mdp_pp_bus_scale_table;
