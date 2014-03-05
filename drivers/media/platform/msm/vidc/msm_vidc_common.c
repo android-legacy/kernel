@@ -496,9 +496,9 @@ static int wait_for_sess_signal_receipt(struct msm_vidc_inst *inst,
 		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
 	if (!rc) {
 		dprintk(VIDC_ERR,
-			"%s: Wait interrupted or timeout[%p]: %d\n",
-			__func__, inst->session, SESSION_MSG_INDEX(cmd));
-		msm_comm_kill_session(inst);
+			"%s: Wait interrupted or timed out [%p]: %d\n",
+			__func__, inst, SESSION_MSG_INDEX(cmd));
+		msm_comm_recover_from_session_error(inst);
 		rc = -EIO;
 	} else {
 		rc = 0;
@@ -1946,6 +1946,43 @@ void msm_comm_scale_clocks_and_bus(struct msm_vidc_inst *inst)
 	}
 }
 
+static int msm_comm_unset_ocmem(struct msm_vidc_core *core)
+{
+	int rc = 0;
+	struct hfi_device *hdev;
+
+	if (!core || !core->device) {
+		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
+		return -EINVAL;
+	}
+	hdev = core->device;
+
+	if (core->state == VIDC_CORE_INVALID) {
+		dprintk(VIDC_ERR,
+				"Core is in bad state. Cannot unset ocmem\n");
+		return -EIO;
+	}
+
+	init_completion(
+		&core->completions[SYS_MSG_INDEX(RELEASE_RESOURCE_DONE)]);
+
+	rc = call_hfi_op(hdev, unset_ocmem, hdev->hfi_device_data);
+	if (rc) {
+		dprintk(VIDC_INFO, "Failed to unset OCMEM on driver\n");
+		goto release_ocmem_failed;
+	}
+	rc = wait_for_completion_timeout(
+		&core->completions[SYS_MSG_INDEX(RELEASE_RESOURCE_DONE)],
+		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
+	if (!rc) {
+		dprintk(VIDC_ERR, "%s: Wait interrupted or timed out: %d\n",
+				__func__, SYS_MSG_INDEX(RELEASE_RESOURCE_DONE));
+		rc = -EIO;
+	}
+release_ocmem_failed:
+	return rc;
+}
+
 static int msm_comm_init_core_done(struct msm_vidc_inst *inst)
 {
 	struct msm_vidc_core *core = inst->core;
@@ -1961,7 +1998,7 @@ static int msm_comm_init_core_done(struct msm_vidc_inst *inst)
 		&core->completions[SYS_MSG_INDEX(SYS_INIT_DONE)],
 		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
 	if (!rc) {
-		dprintk(VIDC_ERR, "%s: Wait interrupted or timeout: %d\n",
+		dprintk(VIDC_ERR, "%s: Wait interrupted or timed out: %d\n",
 				__func__, SYS_MSG_INDEX(SYS_INIT_DONE));
 		rc = -EIO;
 		goto exit;
@@ -3128,8 +3165,8 @@ int msm_comm_try_get_prop(struct msm_vidc_inst *inst, enum hal_property ptype,
 		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
 	if (!rc) {
 		dprintk(VIDC_ERR,
-			"%s: Wait interrupted or timeout[%p]: %d\n",
-			__func__, inst->session,
+			"%s: Wait interrupted or timed out [%p]: %d\n",
+			__func__, inst,
 			SESSION_MSG_INDEX(SESSION_PROPERTY_INFO));
 		inst->state = MSM_VIDC_CORE_INVALID;
 		msm_comm_kill_session(inst);
@@ -4130,7 +4167,15 @@ int msm_comm_kill_session(struct msm_vidc_inst *inst)
 		msm_comm_generate_session_error(inst);
 
 	}
-
+	rc = wait_for_completion_timeout(
+		&inst->completions[SESSION_MSG_INDEX(SESSION_ABORT_DONE)],
+		msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
+	if (!rc) {
+		dprintk(VIDC_ERR, "%s: Wait interrupted or timed out [%p]:%d\n",
+			__func__, inst, SESSION_MSG_INDEX(SESSION_ABORT_DONE));
+		msm_comm_generate_sys_error(inst);
+	} else
+		change_inst_state(inst, MSM_VIDC_CLOSE_DONE);
 	return rc;
 }
 
