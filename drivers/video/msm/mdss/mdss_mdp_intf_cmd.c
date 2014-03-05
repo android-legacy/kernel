@@ -296,7 +296,7 @@ static void mdss_mdp_cmd_readptr_done(void *arg)
 			ctx->rdptr_enabled--;
 
 		/* keep clk on during kickoff */
-		if (ctx->rdptr_enabled == 0 && atomic_read(&ctx->koff_cnt))
+		if (ctx->rdptr_enabled == 0 && ctx->koff_cnt)
 			ctx->rdptr_enabled++;
 	}
 
@@ -694,65 +694,9 @@ static int mdss_mdp_cmd_panel_on(struct mdss_mdp_ctl *ctl,
 		pr_debug("%s: panel already on\n", __func__);
 	}
 
-	return rc;
-}
-
-/*
- * There are 3 partial update possibilities
- * left only ==> enable left pingpong_done
- * left + right ==> enable both pingpong_done
- * right only ==> enable right pingpong_done
- *
- * notification is triggered at pingpong_done which will
- * signal timeline to release source buffer
- *
- * for left+right case, pingpong_done is enabled for both and
- * only the last pingpong_done should trigger the notification
- */
-int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
-{
-	struct mdss_mdp_ctl *sctl = NULL;
-	struct mdss_mdp_cmd_ctx *ctx, *sctx = NULL;
-
-	ctx = (struct mdss_mdp_cmd_ctx *) ctl->priv_data;
-	if (!ctx) {
-		pr_err("invalid ctx\n");
-		return -ENODEV;
-	}
-
-	/* sctl will be null for right only in the case of Partial update */
-	sctl = mdss_mdp_get_split_ctl(ctl);
-
-	if (sctl && (sctl->roi.w == 0 || sctl->roi.h == 0)) {
-		/* left update only, set ssctl to null */
-		sctl = NULL;
-	}
-
-	mdss_mdp_ctl_perf_set_transaction_status(ctl,
-		PERF_HW_MDP_STATE, PERF_STATUS_BUSY);
-
-	if (sctl) {
-		sctx = (struct mdss_mdp_cmd_ctx *) sctl->priv_data;
-		mdss_mdp_ctl_perf_set_transaction_status(sctl,
-			PERF_HW_MDP_STATE, PERF_STATUS_BUSY);
-	}
-
-	/*
-	 * Turn on the panel, if not already. This is because the panel is
-	 * turned on only when we send the first frame and not during cmd
-	 * start. This is to ensure that no artifacts are seen on the panel.
-	 */
-	if (__mdss_mdp_cmd_is_panel_power_off(ctx))
-		mdss_mdp_cmd_panel_on(ctl, sctl);
-
-	MDSS_XLOG(ctl->num, ctl->roi.x, ctl->roi.y, ctl->roi.w,
-						ctl->roi.h);
-
-	atomic_inc(&ctx->koff_cnt);
-	if (sctx)
-		atomic_inc(&sctx->koff_cnt);
-
-	trace_mdp_cmd_kickoff(ctl->num, atomic_read(&ctx->koff_cnt));
+	spin_lock_irqsave(&ctx->clk_lock, flags);
+	ctx->koff_cnt++;
+	spin_unlock_irqrestore(&ctx->clk_lock, flags);
 
 	mdss_mdp_cmd_clk_on(ctx);
 
@@ -763,15 +707,9 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	 */
 	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_CMDLIST_KOFF,
 						(void *)&ctx->recovery);
-	mdss_mdp_cmd_set_stream_size(ctl);
-
-	mdss_mdp_cmd_set_sync_ctx(ctl, sctl);
-
+	INIT_COMPLETION(ctx->pp_comp);
 	mdss_mdp_irq_enable(MDSS_MDP_IRQ_PING_PONG_COMP, ctx->pp_num);
 	mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_START, 1);
-	spin_lock_irqsave(&ctx->clk_lock, flags);
-	ctx->koff_cnt++;
-	spin_unlock_irqrestore(&ctx->clk_lock, flags);
 
 	mdss_mdp_ctl_perf_set_transaction_status(ctl,
 		PERF_SW_COMMIT_STATE, PERF_STATUS_DONE);
