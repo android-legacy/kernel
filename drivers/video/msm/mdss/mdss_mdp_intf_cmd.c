@@ -204,9 +204,8 @@ static inline void mdss_mdp_cmd_clk_on(struct mdss_mdp_cmd_ctx *ctx)
 {
 	unsigned long flags;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	int irq_en, rc;
 
-	if (__mdss_mdp_cmd_is_panel_power_off(ctx))
+	if (!ctx->panel_on)
 		return;
 
 	mutex_lock(&ctx->clk_mtx);
