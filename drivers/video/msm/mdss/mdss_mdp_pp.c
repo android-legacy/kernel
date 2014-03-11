@@ -1962,6 +1962,7 @@ int mdss_mdp_pp_init(struct device *dev)
 					hist[i].base =
 						mdss_mdp_get_dspp_addr_off(i) +
 						MDSS_MDP_REG_DSPP_HIST_CTL_BASE;
+					init_completion(&hist[i].comp);
 				}
 				if (mdata->nmixers_intf == 4)
 					hist[3].intr_shift = 22;
@@ -1978,6 +1979,7 @@ int mdss_mdp_pp_init(struct device *dev)
 			vig[i].pp_res.hist.intr_shift = (vig[i].num * 4);
 			vig[i].pp_res.hist.base = vig[i].base +
 				MDSS_MDP_REG_VIG_HIST_CTL_BASE;
+			init_completion(&vig[i].pp_res.hist.comp);
 		}
 		if (!mdata->pp_bus_hdl) {
 			pp_bus_pdata = &mdp_pp_bus_scale_table;
@@ -3197,6 +3199,12 @@ static int pp_hist_enable(struct pp_hist_col_info *hist_info,
 		ret = -EINVAL;
 		goto exit;
 	}
+	hist_info->frame_cnt = req->frame_cnt;
+	INIT_COMPLETION(hist_info->comp);
+	hist_info->hist_cnt_read = 0;
+	hist_info->hist_cnt_sent = 0;
+	hist_info->hist_cnt_time = 0;
+	spin_lock_irqsave(&hist_info->hist_lock, flag);
 	hist_info->read_request = 0;
 	if (is_hist_v2)
 		hist_info->col_state = HIST_IDLE;
