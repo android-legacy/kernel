@@ -260,8 +260,7 @@ struct mdss_dsi_ctrl_pdata {
 	struct dss_io_data mmss_misc_io;
 	struct dss_io_data phy_io;
 	int reg_size;
-	u32 bus_clk_cnt;
-	u32 link_clk_cnt;
+	u32 clk_cnt;
 	u32 flags;
 	struct clk *mdp_core_clk;
 	struct clk *ahb_clk;
@@ -338,8 +337,11 @@ void mdp4_dsi_cmd_trigger(void);
 void mdss_dsi_cmd_mdp_start(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_cmd_bta_sw_trigger(struct mdss_panel_data *pdata);
 void mdss_dsi_ack_err_status(struct mdss_dsi_ctrl_pdata *ctrl);
-int mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl,
-	u8 clk_type, int enable);
+int mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl, int enable);
+int mdss_dsi_link_clk_start(struct mdss_dsi_ctrl_pdata *ctrl);
+void mdss_dsi_link_clk_stop(struct mdss_dsi_ctrl_pdata *ctrl);
+int mdss_dsi_bus_clk_start(struct mdss_dsi_ctrl_pdata *ctrl);
+void mdss_dsi_bus_clk_stop(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_clk_req(struct mdss_dsi_ctrl_pdata *ctrl,
 				int enable);
 void mdss_dsi_controller_cfg(int enable,
