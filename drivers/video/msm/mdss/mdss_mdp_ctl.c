@@ -812,24 +812,12 @@ static void mdss_mdp_perf_calc_ctl(struct mdss_mdp_ctl *ctl,
 			left_plist, (left_plist ? MAX_PIPES_PER_LM : 0),
 			right_plist, (right_plist ? MAX_PIPES_PER_LM : 0));
 
-	/* we only need bandwidth check on real-time clients (interfaces) */
-	if (ctl->intf_type == MDSS_MDP_NO_INTF)
-		return 0;
+	if (ctl->is_video_mode)
+		perf->bw_ctl = IB_FUDGE_FACTOR(perf->bw_ctl);
 
-	__mdss_mdp_perf_calc_ctl_helper(ctl, &perf,
-			left_plist, left_cnt, right_plist, right_cnt);
-
-	/* convert bandwidth to kb */
-	bw = DIV_ROUND_UP_ULL(perf.bw_ctl, 1000);
-	pr_debug("calculated bandwidth=%uk\n", bw);
-
-	threshold = ctl->is_video_mode ? mdata->max_bw_low : mdata->max_bw_high;
-	if (bw > threshold) {
-		pr_debug("exceeds bandwidth: %ukb > %ukb\n", bw, threshold);
-		return -E2BIG;
-	}
-
-	return 0;
+	pr_debug("ctl=%d clk_rate=%u\n", ctl->num, perf->mdp_clk_rate);
+	pr_debug("bw_overlap=%llu bw_prefill=%llu prefill_byptes=%d\n",
+		 perf->bw_overlap, perf->bw_prefill, perf->prefill_bytes);
 }
 
 int mdss_mdp_perf_bw_check_pipe(struct mdss_mdp_perf_params *perf,
