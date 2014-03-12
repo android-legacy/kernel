@@ -1030,7 +1030,7 @@ static int msm_venc_queue_setup(struct vb2_queue *q,
 	return rc;
 }
 
-static int msm_venc_toggle_hier_p(struct msm_vidc_inst *inst, bool enable)
+static int msm_venc_enable_hier_p(struct msm_vidc_inst *inst)
 {
 	int num_enh_layers = 0;
 	u32 property_id = 0;
@@ -1045,10 +1045,9 @@ static int msm_venc_toggle_hier_p(struct msm_vidc_inst *inst, bool enable)
 	if (inst->fmts[CAPTURE_PORT]->fourcc != V4L2_PIX_FMT_VP8)
 		return 0;
 
-	num_enh_layers = enable ? inst->capability.hier_p.max - 1 : 0;
-
-	dprintk(VIDC_DBG, "%s Hier-P in firmware\n",
-			num_enh_layers ? "Enable" : "Disable");
+	num_enh_layers = inst->capability.hier_p.max - 1;
+	if (!num_enh_layers)
+		return 0;
 
 	hdev = inst->core->device;
 	property_id = HAL_PARAM_VENC_HIER_P_MAX_ENH_LAYERS;
@@ -1073,6 +1072,10 @@ static inline int start_streaming(struct msm_vidc_inst *inst)
 		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
 		return -EINVAL;
 	}
+
+	rc = msm_venc_enable_hier_p(inst);
+	if (rc)
+		return rc;
 
 	if (inst->capability.pixelprocess_capabilities &
 		HAL_VIDEO_ENCODER_SCALING_CAPABILITY)
