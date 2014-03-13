@@ -3194,17 +3194,12 @@ static int pp_hist_enable(struct pp_hist_col_info *hist_info,
 	/* check if it is idle */
 	spin_lock_irqsave(&hist_info->hist_lock, flag);
 	if (hist_info->col_en) {
+		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 		pr_info("%s Hist collection has already been enabled %p",
 			__func__, hist_info->base);
 		ret = -EINVAL;
 		goto exit;
 	}
-	hist_info->frame_cnt = req->frame_cnt;
-	INIT_COMPLETION(hist_info->comp);
-	hist_info->hist_cnt_read = 0;
-	hist_info->hist_cnt_sent = 0;
-	hist_info->hist_cnt_time = 0;
-	spin_lock_irqsave(&hist_info->hist_lock, flag);
 	hist_info->read_request = 0;
 	if (is_hist_v2)
 		hist_info->col_state = HIST_IDLE;
@@ -3214,7 +3209,6 @@ static int pp_hist_enable(struct pp_hist_col_info *hist_info,
 	spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 	hist_info->frame_cnt = req->frame_cnt;
 	INIT_COMPLETION(hist_info->comp);
-	INIT_COMPLETION(hist_info->first_kick);
 	hist_info->hist_cnt_read = 0;
 	hist_info->hist_cnt_sent = 0;
 	hist_info->hist_cnt_time = 0;
