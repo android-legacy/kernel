@@ -995,20 +995,9 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 
 	mdss_dsi_op_mode_config(DSI_CMD_MODE, pdata);
 
-	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
-
-	if (power_state == MDSS_PANEL_POWER_DOZE) {
-		pr_debug("%s: low power state requested\n", __func__);
-		if (ctrl_pdata->low_power_config)
-			ret = ctrl_pdata->low_power_config(pdata, true);
-		goto error;
-	}
-
-	if (pdata->panel_info.type == MIPI_VIDEO_PANEL &&
-			ctrl_pdata->off_cmds.link_state == DSI_LP_MODE) {
-		mdss_dsi_sw_reset(ctrl_pdata, false);
-		mdss_dsi_host_init(pdata);
-	}
+	if ((pdata->panel_info.type == MIPI_CMD_PANEL) &&
+		mipi->vsync_enable && mipi->hw_vsync_mode)
+		mdss_dsi_set_tear_off(ctrl_pdata);
 
 	mdss_dsi_op_mode_config(DSI_CMD_MODE, pdata);
 
