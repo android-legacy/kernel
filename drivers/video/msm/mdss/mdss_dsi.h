@@ -238,14 +238,9 @@ enum {
 	DSI_CTRL_MAX,
 };
 
-#define DSI_CTRL_LEFT		DSI_CTRL_0
-#define DSI_CTRL_RIGHT		DSI_CTRL_1
-#define DSI_CTRL_CLK_SLAVE	DSI_CTRL_RIGHT
-#define DSI_CTRL_CLK_MASTER	DSI_CTRL_LEFT
-
-#define DSI_BUS_CLKS	BIT(0)
-#define DSI_LINK_CLKS	BIT(1)
-#define DSI_ALL_CLKS	((DSI_BUS_CLKS) | (DSI_LINK_CLKS))
+/* DSI controller #0 is always treated as a master in broadcast mode */
+#define DSI_CTRL_MASTER		DSI_CTRL_0
+#define DSI_CTRL_SLAVE		DSI_CTRL_1
 
 #define DSI_EV_PLL_UNLOCKED		0x0001
 #define DSI_EV_MDP_FIFO_UNDERFLOW	0x0002
@@ -349,7 +344,7 @@ void mdss_dsi_clk_req(struct mdss_dsi_ctrl_pdata *ctrl,
 				int enable);
 void mdss_dsi_controller_cfg(int enable,
 				struct mdss_panel_data *pdata);
-void mdss_dsi_sw_reset(struct mdss_dsi_ctrl_pdata *ctrl, bool restore);
+void mdss_dsi_sw_reset(struct mdss_panel_data *pdata);
 
 irqreturn_t mdss_dsi_isr(int irq, void *ptr);
 void mdss_dsi_irq_handler_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
@@ -380,65 +375,39 @@ int mdss_dsi_panel_init(struct device_node *node,
 		struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 		bool cmd_cfg_cont_splash);
 
-static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
+static inline bool mdss_dsi_broadcast_mode_enabled(void)
 {
-	switch (module) {
-	case DSI_CORE_PM:	return "DSI_CORE_PM";
-	case DSI_CTRL_PM:	return "DSI_CTRL_PM";
-	case DSI_PANEL_PM:	return "PANEL_PM";
-	default:		return "???";
-	}
+	return ctrl_list[DSI_CTRL_MASTER]->shared_pdata.broadcast_enable &&
+		ctrl_list[DSI_CTRL_SLAVE] &&
+		ctrl_list[DSI_CTRL_SLAVE]->shared_pdata.broadcast_enable;
 }
 
-static inline const char *__mdss_dsi_pm_supply_node_name(
-	enum dsi_pm_type module)
+static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_master_ctrl(void)
 {
-	switch (module) {
-	case DSI_CORE_PM:	return "qcom,core-supply-entries";
-	case DSI_CTRL_PM:	return "qcom,ctrl-supply-entries";
-	case DSI_PANEL_PM:	return "qcom,panel-supply-entries";
-	default:		return "???";
-	}
+	if (mdss_dsi_broadcast_mode_enabled())
+		return ctrl_list[DSI_CTRL_MASTER];
+	else
+		return NULL;
 }
 
-static inline bool mdss_dsi_split_display_enabled(void)
+static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_slave_ctrl(void)
 {
-	/*
-	 * currently the only supported mode is split display.
-	 * So, if both controllers are initialized, then assume that
-	 * split display mode is enabled.
-	 */
-	return ctrl_list[DSI_CTRL_LEFT] && ctrl_list[DSI_CTRL_RIGHT];
+	if (mdss_dsi_broadcast_mode_enabled())
+		return ctrl_list[DSI_CTRL_SLAVE];
+	else
+		return NULL;
 }
 
-static inline bool mdss_dsi_sync_wait_enable(struct mdss_dsi_ctrl_pdata *ctrl)
+static inline bool mdss_dsi_is_master_ctrl(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	return ctrl->cmd_sync_wait_broadcast;
+	return mdss_dsi_broadcast_mode_enabled() &&
+		(ctrl->ndx == DSI_CTRL_MASTER);
 }
 
-static inline bool mdss_dsi_sync_wait_trigger(struct mdss_dsi_ctrl_pdata *ctrl)
+static inline bool mdss_dsi_is_slave_ctrl(struct mdss_dsi_ctrl_pdata *ctrl)
 {
-	return ctrl->cmd_sync_wait_broadcast &&
-				ctrl->cmd_sync_wait_trigger;
-}
-
-static inline bool mdss_dsi_is_left_ctrl(struct mdss_dsi_ctrl_pdata *ctrl)
-{
-        return ctrl->ndx == DSI_CTRL_LEFT;
-}
-
-static inline bool mdss_dsi_is_right_ctrl(struct mdss_dsi_ctrl_pdata *ctrl)
-{
-        return ctrl->ndx == DSI_CTRL_RIGHT;
-}
-
-static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_other_ctrl(
-					struct mdss_dsi_ctrl_pdata *ctrl)
-{
-	if (ctrl->ndx == DSI_CTRL_RIGHT)
-		return ctrl_list[DSI_CTRL_LEFT];
-
-	return ctrl_list[DSI_CTRL_RIGHT];
+	return mdss_dsi_broadcast_mode_enabled() &&
+		(ctrl->ndx == DSI_CTRL_SLAVE);
 }
 
 static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_ctrl_by_index(int ndx)
@@ -448,49 +417,4 @@ static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_ctrl_by_index(int ndx)
 
 	return ctrl_list[ndx];
 }
-
-static inline bool mdss_dsi_is_ctrl_clk_slave(struct mdss_dsi_ctrl_pdata *ctrl)
-{
-	return mdss_dsi_split_display_enabled() &&
-		(ctrl->ndx == DSI_CTRL_CLK_SLAVE);
-}
-
-static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_ctrl_clk_master(void)
-{
-	return ctrl_list[DSI_CTRL_CLK_MASTER];
-}
-
-static inline struct mdss_dsi_ctrl_pdata *mdss_dsi_get_ctrl_clk_slave(void)
-{
-	return ctrl_list[DSI_CTRL_CLK_SLAVE];
-}
-
-static inline bool mdss_dsi_is_panel_off(struct mdss_panel_data *pdata)
-{
-	return mdss_panel_is_power_off(pdata->panel_info.panel_power_state);
-}
-
-static inline bool mdss_dsi_is_panel_on(struct mdss_panel_data *pdata)
-{
-	return mdss_panel_is_power_on(pdata->panel_info.panel_power_state);
-}
-
-static inline bool mdss_dsi_is_panel_on_interactive(
-	struct mdss_panel_data *pdata)
-{
-	return mdss_panel_is_power_on_interactive(
-		pdata->panel_info.panel_power_state);
-}
-
-static inline bool mdss_dsi_is_panel_on_lp(struct mdss_panel_data *pdata)
-{
-	return mdss_panel_is_power_on_lp(pdata->panel_info.panel_power_state);
-}
-
-static inline bool mdss_dsi_ulps_feature_enabled(
-	struct mdss_panel_data *pdata)
-{
-	return pdata->panel_info.ulps_feature_enabled;
-}
-
 #endif /* MDSS_DSI_H */

@@ -1038,6 +1038,18 @@ bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl)
 void mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 {
 	int changed = 0;
+	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
+
+	/*
+	 * In broadcast mode, we need to enable clocks for the
+	 * master controller as well when enabling clocks for the
+	 * slave controller
+	 */
+	if (mdss_dsi_is_slave_ctrl(ctrl)) {
+		mctrl = mdss_dsi_get_master_ctrl();
+		if (!mctrl)
+			pr_warn("%s: Unable to get master control\n", __func__);
+	}
 
 	if (enable) {
 		if (*clk_cnt == 0)
@@ -1053,7 +1065,19 @@ void mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 		}
 	}
 
-	return changed;
+	pr_debug("%s: ndx=%d clk_cnt=%d changed=%d enable=%d\n",
+		__func__, ctrl->ndx, ctrl->clk_cnt, changed, enable);
+
+	if (changed) {
+		if (enable && mctrl)
+			mdss_dsi_clk_ctrl_sub(mctrl, enable);
+
+		mdss_dsi_clk_ctrl_sub(ctrl, enable);
+
+		if (!enable && mctrl)
+			mdss_dsi_clk_ctrl_sub(mctrl, enable);
+	}
+	mutex_unlock(&dsi_clk_lock);
 }
 
 static int mdss_dsi_clk_ctrl_sub(struct mdss_dsi_ctrl_pdata *ctrl,
@@ -1062,22 +1086,37 @@ static int mdss_dsi_clk_ctrl_sub(struct mdss_dsi_ctrl_pdata *ctrl,
 	int rc = 0;
 	struct mdss_panel_data *pdata;
 
-	if (!ctrl) {
-		pr_err("%s: Invalid arg\n", __func__);
-		return -EINVAL;
+void mdss_dsi_phy_disable(struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl0 = NULL;
+
+	if (ctrl == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
 	}
 
-	pdata = &ctrl->panel_data;
+	/*
+	 * In dual-dsi configuration, the phy should be disabled for the
+	 * first controller only when the second controller is disabled.
+	 * This is true regardless of whether broadcast mode is enabled
+	 * or not.
+	 */
+	if ((ctrl->ndx == DSI_CTRL_0) &&
+		mdss_dsi_get_ctrl_by_index(DSI_CTRL_1)) {
+		pr_debug("%s: Dual dsi detected. skipping config for ctrl%d\n",
+			__func__, ctrl->ndx);
+		return;
+	}
 
-	pr_debug("%s: ndx=%d clk_type=%08x enable=%d\n", __func__,
-		ctrl->ndx, clk_type, enable);
-
-	if (left_ctrl &&
-			(ctrl->panel_data.panel_info.pdest
-			 ==
-			 DISPLAY_2)) {
-		MIPI_OUTP(left_ctrl->phy_io.base + 0x0170, 0x000);
-		MIPI_OUTP(left_ctrl->phy_io.base + 0x0298, 0x000);
+	if (ctrl->ndx == DSI_CTRL_1) {
+		ctrl0 = mdss_dsi_get_ctrl_by_index(DSI_CTRL_0);
+		if (ctrl0) {
+			MIPI_OUTP(ctrl0->phy_io.base + 0x0170, 0x000);
+			MIPI_OUTP(ctrl0->phy_io.base + 0x0298, 0x000);
+		} else {
+			pr_warn("%s: Unable to get control%d\n",
+				__func__, DSI_CTRL_0);
+		}
 	}
 
 	MIPI_OUTP(ctrl->phy_io.base + 0x0170, 0x000);
@@ -1102,12 +1141,13 @@ bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type)
 	int i, off, ln, offset;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL, *temp_ctrl = NULL;
 
-	mutex_lock(&dsi_clk_lock);
-	if (clk_type & DSI_BUS_CLKS)
-		bus_enabled = ctrl->bus_clk_cnt ? true : false;
-	if (clk_type & DSI_LINK_CLKS)
-		link_enabled = ctrl->link_clk_cnt ? true : false;
-	mutex_unlock(&dsi_clk_lock);
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+	if (!ctrl_pdata) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
+	}
+	temp_ctrl = ctrl_pdata;
 
 	return bus_enabled && link_enabled;
 }
@@ -1115,16 +1155,18 @@ bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type)
 	/* Strength ctrl 0 */
 	MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x0184, pd->strength[0]);
 
-	/* phy regulator ctrl settings. Both the DSI controller
-	   have one regulator */
-	if ((ctrl_pdata->panel_data).panel_info.pdest == DISPLAY_1)
-		temp_ctrl = ctrl_pdata;
-	else if (left_ctrl && (pdata->panel_info.pdest == DISPLAY_2))
-		temp_ctrl = left_ctrl;
-
-	if (!temp_ctrl) {
-		pr_err("%s: Invalid ctrl data\n", __func__);
-		return;
+	/*
+	 * Phy regulator ctrl settings.
+	 * In dual dsi configuration, the second controller also uses
+	 * the regulators of the first controller, irrespective of whether
+	 * broadcast mode is enabled or not.
+	 */
+	if (ctrl_pdata->ndx == DSI_CTRL_1) {
+		temp_ctrl = mdss_dsi_get_ctrl_by_index(DSI_CTRL_0);
+		if (!temp_ctrl) {
+			pr_err("%s: Unable to get master ctrl\n", __func__);
+			return;
+		}
 	}
 
 	/* Regulator ctrl 0 */
