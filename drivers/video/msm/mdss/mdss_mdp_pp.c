@@ -3662,8 +3662,11 @@ static int pp_hist_collect(struct mdp_histogram_data *hist,
 		if (is_hist_v2)
 			writel_relaxed(0, ctl_base);
 		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
-		if (expect_sum && sum != expect_sum)
+		if (expect_sum && sum != expect_sum) {
+			pr_debug("hist error: bin sum incorrect! (%d/%d)\n",
+				sum, expect_sum);
 			ret = -ENODATA;
+		}
 	} else {
 		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 	}
