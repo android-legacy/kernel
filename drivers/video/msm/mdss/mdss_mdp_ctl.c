@@ -38,7 +38,7 @@ static inline u64 fudge_factor(u64 val, u32 numer, u32 denom)
 static inline u64 apply_fudge_factor(u64 val,
 	struct mdss_fudge_factor *factor)
 {
-	return fudge_factor(val, factor->numer, factor->denom);
+		return fudge_factor(val, factor->numer, factor->denom);
 }
 
 static DEFINE_MUTEX(mdss_mdp_ctl_lock);
@@ -812,11 +812,16 @@ static void mdss_mdp_perf_calc_ctl(struct mdss_mdp_ctl *ctl,
 			left_plist, (left_plist ? MAX_PIPES_PER_LM : 0),
 			right_plist, (right_plist ? MAX_PIPES_PER_LM : 0));
 
-	if (ctl->is_video_mode)
-		perf->bw_ctl = IB_FUDGE_FACTOR(perf->bw_ctl);
-
+	if (ctl->is_video_mode) {
+		if (perf->bw_overlap > perf->bw_prefill)
+			perf->bw_ctl = apply_fudge_factor(perf->bw_ctl,
+				&mdss_res->ib_factor_overlap);
+		else
+			perf->bw_ctl = apply_fudge_factor(perf->bw_ctl,
+				&mdss_res->ib_factor);
+	}
 	pr_debug("ctl=%d clk_rate=%u\n", ctl->num, perf->mdp_clk_rate);
-	pr_debug("bw_overlap=%llu bw_prefill=%llu prefill_byptes=%d\n",
+	pr_debug("bw_overlap=%llu bw_prefill=%llu prefill_bytes=%d\n",
 		 perf->bw_overlap, perf->bw_prefill, perf->prefill_bytes);
 }
 
@@ -974,21 +979,11 @@ static inline void mdss_mdp_ctl_perf_update_bus(struct mdss_data_type *mdata,
 				ctl->cur_perf.bw_vote_mode);
 		}
 	}
-	bus_ib_quota = max(bw_sum_of_intfs, mdata->perf_tune.min_bus_vote);
-	bus_ab_quota = apply_fudge_factor(bus_ib_quota,
+	bus_ib_quota = bw_sum_of_intfs;
+	bus_ab_quota = apply_fudge_factor(bw_sum_of_intfs,
 		&mdss_res->ab_factor);
-
-	if ((bw_vote_mode != MDSS_MDP_BW_MODE_NONE) &&
-		IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev, MDSS_MDP_HW_REV_103))
-		mdss_mdp_ctl_perf_bus_override(mdata, &bus_ib_quota,
-			bw_vote_mode);
-
-	ATRACE_INT("bus_quota", bus_ib_quota);
-	trace_mdp_perf_update_bus(bus_ab_quota, bus_ib_quota);
-	mdss_bus_scale_set_quota(MDSS_HW_MDP, bus_ab_quota, bus_ib_quota);
-	pr_debug("ab=%llu ib=%llu mode=%d\n", bus_ab_quota, bus_ib_quota,
-		bw_vote_mode);
-	ATRACE_END(__func__);
+	mdss_mdp_bus_scale_set_quota(bus_ab_quota, bus_ib_quota);
+	pr_debug("ab=%llu ib=%llu\n", bus_ab_quota, bus_ib_quota);
 }
 
 /**
