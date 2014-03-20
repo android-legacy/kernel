@@ -1143,11 +1143,17 @@ static inline int venus_hfi_power_off(struct venus_hfi_device *device)
 		return 0;
 	}
 
-	dprintk(VIDC_DBG, "Entering power collapse\n");
+	/*Temporarily enable clocks to make TZ call.*/
+	rc = venus_hfi_clk_enable(device);
+	if (rc) {
+		dprintk(VIDC_WARN, "Failed to enable clocks before TZ call\n");
+		return rc;
+	}
 	rc = venus_hfi_tzbsp_set_video_state(TZBSP_VIDEO_STATE_SUSPEND);
 	if (rc) {
 		dprintk(VIDC_WARN, "Failed to suspend video core %d\n", rc);
-		goto err_tzbsp_suspend;
+		venus_hfi_clk_disable(device);
+		return rc;
 	}
 	venus_hfi_iommu_detach(device);
 
@@ -1160,9 +1166,8 @@ static inline int venus_hfi_power_off(struct venus_hfi_device *device)
 
 	rc = venus_hfi_acquire_regulators(device);
 	if (rc) {
-		dprintk(VIDC_ERR, "Failed to enable gdsc in %s Err code = %d\n",
-			__func__, rc);
-		goto err_acquire_regulators;
+		dprintk(VIDC_WARN, "Failed to disable GDSC, %d\n", rc);
+		return rc;
 	}
 
 	venus_hfi_unvote_buses(device);
