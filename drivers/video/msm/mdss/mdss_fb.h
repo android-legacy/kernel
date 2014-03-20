@@ -71,8 +71,6 @@ enum mdp_notify_event {
 	MDP_NOTIFY_FRAME_FLUSHED,
 	MDP_NOTIFY_FRAME_DONE,
 	MDP_NOTIFY_FRAME_TIMEOUT,
-	MDP_NOTIFY_FRAME_CONFIG_DONE,
-	MDP_NOTIFY_FRAME_START_DONE,
 };
 
 struct disp_info_type_suspend {
@@ -233,9 +231,6 @@ struct msm_fb_data_type {
 	bool shutdown_pending;
 
 	struct msm_fb_splash_info splash_info;
-
-	wait_queue_head_t ioctl_q;
-	atomic_t ioctl_ref_cnt;
 
 	wait_queue_head_t ioctl_q;
 	atomic_t ioctl_ref_cnt;

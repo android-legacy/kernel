@@ -305,9 +305,6 @@ static void mdss_fb_parse_dt_split(struct msm_fb_data_type *mfd)
 	of_property_read_u32_array(pdev->dev.of_node,
 		"qcom,mdss-fb-split", data, 2);
 
-	of_property_read_u32_array(pdev->dev.of_node,
-		"qcom,mdss-fb-split", data, 2);
-
 	if (!mdss_fb_validate_split(data[0], data[1], mfd))
 		pr_debug("dt split_left=%d split_right=%d\n", data[0], data[1]);
 }
@@ -606,8 +603,6 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	if (mfd->mdp.splash_init_fnc)
 		mfd->mdp.splash_init_fnc(mfd);
-
-	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
 
 	INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
 
@@ -1761,13 +1756,6 @@ static int mdss_fb_open(struct fb_info *info, int user)
 
 	pinfo->ref_cnt++;
 	mfd->ref_cnt++;
-
-	/* Stop the splash thread once userspace open the fb node */
-	if (mfd->splash_thread && mfd->ref_cnt > 1) {
-		kthread_stop(mfd->splash_thread);
-		mfd->splash_thread = NULL;
-		mdss_fb_free_fb_ion_memory(mfd);
-	}
 
 	return 0;
 

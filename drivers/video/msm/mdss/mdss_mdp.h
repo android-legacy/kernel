@@ -596,43 +596,6 @@ static inline int mdss_mdp_line_buffer_width(void)
 	return MAX_LINE_BUFFER_WIDTH;
 }
 
-static inline void mdss_update_sd_client(struct mdss_data_type *mdata,
-							bool status)
-{
-	if (status)
-		atomic_inc(&mdata->sd_client_count);
-	else
-		atomic_add_unless(&mdss_res->sd_client_count, -1, 0);
-}
-
-static inline struct clk *mdss_mdp_get_clk(u32 clk_idx)
-{
-	if (clk_idx < MDSS_MAX_CLK)
-		return mdss_res->mdp_clk[clk_idx];
-	return NULL;
-}
-
-static inline bool mdss_mdp_ctl_is_power_off(struct mdss_mdp_ctl *ctl)
-{
-	return mdss_panel_is_power_off(ctl->power_state);
-}
-
-static inline bool mdss_mdp_ctl_is_power_on_interactive(
-	struct mdss_mdp_ctl *ctl)
-{
-	return mdss_panel_is_power_on_interactive(ctl->power_state);
-}
-
-static inline bool mdss_mdp_ctl_is_power_on(struct mdss_mdp_ctl *ctl)
-{
-	return mdss_panel_is_power_on(ctl->power_state);
-}
-
-static inline bool mdss_mdp_ctl_is_power_on_lp(struct mdss_mdp_ctl *ctl)
-{
-	return mdss_panel_is_power_on_lp(ctl->power_state);
-}
-
 irqreturn_t mdss_mdp_isr(int irq, void *ptr);
 void mdss_mdp_irq_clear(struct mdss_data_type *mdata,
 		u32 intr_type, u32 intf_num);
@@ -659,9 +622,14 @@ int mdss_mdp_overlay_req_check(struct msm_fb_data_type *mfd,
 			       struct mdp_overlay *req,
 			       struct mdss_mdp_format_params *fmt);
 int mdss_mdp_overlay_vsync_ctrl(struct msm_fb_data_type *mfd, int en);
+int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
+			     struct mdss_mdp_data *data,
+			     struct msmfb_data *planes,
+			     int num_planes,
+			     u32 flags);
 int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	struct mdp_overlay *req, struct mdss_mdp_pipe **ppipe,
-	struct mdss_mdp_pipe *left_blend_pipe, bool is_single_layer);
+	struct mdss_mdp_pipe *left_blend_pipe);
 void mdss_mdp_handoff_cleanup_pipes(struct msm_fb_data_type *mfd,
 							u32 type);
 int mdss_mdp_overlay_release(struct msm_fb_data_type *mfd, int ndx);
