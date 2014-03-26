@@ -945,6 +945,9 @@ static int mdss_iommu_attach(struct mdss_data_type *mdata)
 
 	MDSS_XLOG(mdata->iommu_attached);
 
+	mutex_lock(&mdp_iommu_lock);
+	MDSS_XLOG(mdata->iommu_attached);
+
 	if (mdata->iommu_attached) {
 		pr_debug("mdp iommu already attached\n");
 		goto end;
@@ -982,6 +985,7 @@ static int mdss_iommu_dettach(struct mdss_data_type *mdata)
 	struct mdss_iommu_map_type *iomap;
 	int i;
 
+	mutex_lock(&mdp_iommu_lock);
 	MDSS_XLOG(mdata->iommu_attached);
 
 	if (!mdata->iommu_attached) {

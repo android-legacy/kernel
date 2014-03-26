@@ -203,8 +203,8 @@ struct mdss_mdp_ctl {
 	struct mdss_panel_data *panel_data;
 	struct mdss_mdp_vsync_handler vsync_handler;
 
-	struct mdss_rect roi;
-	struct mdss_rect roi_bkup;
+	struct mdss_mdp_img_rect roi;
+	struct mdss_mdp_img_rect roi_bkup;
 	u8 roi_changed;
 	u8 valid_roi;
 

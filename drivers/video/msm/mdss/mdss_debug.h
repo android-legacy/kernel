@@ -31,13 +31,6 @@
 #define MDSS_XLOG_TOUT_HANDLER(...)	\
 	mdss_xlog_tout_handler(__func__, ##__VA_ARGS__, XLOG_TOUT_DATA_LIMITER)
 
-#define ATRACE_END(name) trace_tracing_mark_write(current->tgid, name, 0)
-#define ATRACE_BEGIN(name) trace_tracing_mark_write(current->tgid, name, 1)
-#define ATRACE_FUNC() ATRACE_BEGIN(__func__)
-
-#define ATRACE_INT(name, value) \
-	trace_mdp_trace_counter(current->tgid, name, value)
-
 #ifdef CONFIG_DEBUG_FS
 struct mdss_debug_base {
 	struct mdss_debug_data *mdd;
@@ -60,7 +53,6 @@ struct debug_log {
 
 struct mdss_debug_data {
 	struct dentry *root;
-	struct dentry *perf;
 	struct list_head base_list;
 	struct debug_log logd;
 };
@@ -79,6 +71,7 @@ int mdss_create_xlog_debug(struct mdss_debug_data *mdd);
 void mdss_xlog(const char *name, ...);
 void mdss_xlog_dump(void);
 void mdss_dump_reg(char __iomem *base, int len);
+void mdss_dsi_debug_check_te(struct mdss_panel_data *pdata);
 void mdss_xlog_tout_handler(const char *name, ...);
 #else
 static inline int mdss_debugfs_init(struct mdss_data_type *mdata) { return 0; }

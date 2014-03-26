@@ -118,6 +118,8 @@ void mdss_dsi_clk_req(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 		mdss_dsi_cmd_mdp_busy(ctrl);
 		mutex_unlock(&ctrl->cmd_mutex);
 	}
+
+	MDSS_XLOG(ctrl->ndx, enable, ctrl->mdp_busy, current->pid);
 	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, enable);
 }
 
@@ -1418,7 +1420,42 @@ need_lock:
 
 	MDSS_XLOG(ctrl->ndx, from_mdp, ctrl->mdp_busy, current->pid,
 							XLOG_FUNC_EXIT);
+	mutex_unlock(&ctrl->cmd_mutex);
 	return ret;
+}
+
+void mdss_dsi_debug_check_te(struct mdss_panel_data *pdata)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	u8 rc, te_count = 0;
+	u8 te_max = 250;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
+	}
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	pr_info(" ============ start waiting for TE ============\n");
+	for (te_count = 0; te_count < te_max; te_count++) {
+		rc = gpio_get_value(ctrl_pdata->disp_te_gpio);
+		if (rc != 0) {
+			pr_info("%s: gpio_get_value(disp_te_gpio) = %d ",
+								__func__, rc);
+			pr_info("te_count = %d\n", te_count);
+			break;
+		}
+		/* usleep suspends the calling thread whereas udelay is a
+		 * busy wait. Here the value of te_gpio is checked in a loop of
+		 * max count = 250. If this loop has to iterate multiple
+		 * times before the te_gpio is 1, the calling thread will end
+		 * up in suspend/wakeup sequence multiple times if usleep is
+		 * used, which is an overhead. So use udelay instead of usleep.
+		 */
+		udelay(80);
+	}
+	pr_info(" ============ finish waiting for TE ============\n");
 }
 
 static void dsi_send_events(struct mdss_dsi_ctrl_pdata *ctrl, u32 events)
@@ -1561,6 +1598,8 @@ void mdss_dsi_fifo_status(struct mdss_dsi_ctrl_pdata *ctrl)
 		pr_err("%s: status=%x\n", __func__, status);
 		if (status & 0x0080)  /* CMD_DMA_FIFO_UNDERFLOW */
 			dsi_send_events(ctrl, DSI_EV_MDP_FIFO_UNDERFLOW);
+			MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0", "dsi1",
+						"edp", "hdmi", "panic");
 	}
 }
 

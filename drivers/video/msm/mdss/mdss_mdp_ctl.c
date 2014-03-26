@@ -24,8 +24,6 @@
 #include "mdss_fb.h"
 #include "mdss_mdp.h"
 #include "mdss_debug.h"
-#include "mdss_mdp_trace.h"
-#include "mdss_debug.h"
 
 static void mdss_mdp_xlog_mixer_reg(struct mdss_mdp_ctl *ctl);
 static inline u64 fudge_factor(u64 val, u32 numer, u32 denom)
@@ -2863,7 +2861,9 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 		mdss_mdp_ctl_split_display_enable(split_enable, ctl, sctl);
 	}
 
-	ATRACE_BEGIN("postproc_programming");
+	ctl->roi_bkup.w = ctl->roi.w;
+	ctl->roi_bkup.h = ctl->roi.h;
+
 	if (ctl->mfd && ctl->mfd->dcm_state != DTM_ENTER)
 		/* postprocessing setup, including dspp */
 		mdss_mdp_pp_setup_locked(ctl);
@@ -2919,23 +2919,10 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 	ctl->flush_reg_data = ctl->flush_bits;
 	ctl->flush_bits = 0;
 
-	if (sctl && !ctl->valid_roi && sctl->valid_roi) {
-		/*
-		 * Seperate kickoff on DSI1 is needed only when we have
-		 * ONLY right half updating on a dual DSI panel
-		 */
-		if (sctl->display_fnc)
-			ret = sctl->display_fnc(sctl, arg); /* DSI1 kickoff */
-	} else {
-		if (ctl->display_fnc)
-			ret = ctl->display_fnc(ctl, arg); /* DSI0 kickoff */
-	}
+	mdss_mdp_xlog_mixer_reg(ctl);
 
-	if (sctl)
-		sctl->valid_roi = 0;
-
-	ctl->valid_roi = 0;
-
+	if (ctl->display_fnc)
+		ret = ctl->display_fnc(ctl, arg); /* kickoff */
 	if (ret)
 		pr_warn("error displaying frame\n");
 

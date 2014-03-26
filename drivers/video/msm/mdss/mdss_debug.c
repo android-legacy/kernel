@@ -506,6 +506,11 @@ int mdss_debugfs_init(struct mdss_data_type *mdata)
 	if (mdss_create_xlog_debug(mdd))
 		goto err;
 
+	if (mdss_create_xlog_debug(mdd)) {
+		mdss_debugfs_cleanup(mdd);
+		return -ENODEV;
+	}
+
 	mdata->debug_inf.debug_data = mdd;
 
 	return 0;
