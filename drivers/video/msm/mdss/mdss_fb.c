@@ -90,8 +90,6 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			 unsigned long arg);
 static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 		struct vm_area_struct *vma);
-static int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd,
-		size_t fb_size);
 static void mdss_fb_release_fences(struct msm_fb_data_type *mfd);
 static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 		unsigned long val, void *data);
@@ -1187,23 +1185,23 @@ static inline int mdss_fb_create_ion_client(struct msm_fb_data_type *mfd)
 	return 0;
 }
 
-static struct fb_ops mdss_fb_ops = {
-	.owner = THIS_MODULE,
-	.fb_open = mdss_fb_open,
-	.fb_release = mdss_fb_release,
-	.fb_check_var = mdss_fb_check_var,	/* vinfo check */
-	.fb_set_par = mdss_fb_set_par,	/* set the video mode */
-	.fb_blank = mdss_fb_blank,	/* blank display */
-	.fb_pan_display = mdss_fb_pan_display,	/* pan display */
-	.fb_ioctl = mdss_fb_ioctl,	/* perform fb specific ioctl */
-#ifdef CONFIG_COMPAT
-	.fb_compat_ioctl = mdss_fb_compat_ioctl,
-#endif
-	.fb_mmap = mdss_fb_mmap,
-};
+void mdss_fb_free_fb_ion_memory(struct msm_fb_data_type *mfd)
+{
+	if (!mfd) {
+		pr_err("no mfd\n");
+		return;
+	}
+
+	if (!mfd->fbi->screen_base)
+		return;
+
+	if (!mfd->fb_ion_client || !mfd->fb_ion_handle) {
+		pr_err("invalid input parameters for fb%d\n", mfd->index);
+		return;
+	}
 
 	mfd->fbi->screen_base = NULL;
-	mfd->fbi->fix.smem_start = 0;
+	mfd->fbi->fix.smem_len = 0;
 
 	ion_unmap_kernel(mfd->fb_ion_client, mfd->fb_ion_handle);
 
@@ -1215,9 +1213,9 @@ static struct fb_ops mdss_fb_ops = {
 	ion_free(mfd->fb_ion_client, mfd->fb_ion_handle);
 }
 
-static int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd,
-						size_t fb_size)
+int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd)
 {
+	size_t size;
 	unsigned long buf_size;
 	int rc;
 	void *vaddr;
@@ -1235,9 +1233,10 @@ static int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd,
 		}
 	}
 
-	pr_debug("size for mmap = %d", (int) fb_size);
+	size = mfd->fbi->fix.line_length * mfd->fbi->var.yres * MDSS_FB_NUM;
+	pr_debug("size for mmap = %d", (int) size);
 
-	mfd->fb_ion_handle = ion_alloc(mfd->fb_ion_client, fb_size, SZ_4K,
+	mfd->fb_ion_handle = ion_alloc(mfd->fb_ion_client, size, SZ_4K,
 			ION_HEAP(ION_SYSTEM_HEAP_ID), 0);
 	if (IS_ERR_OR_NULL(mfd->fb_ion_handle)) {
 		pr_err("unable to alloc fbmem from ion - %ld\n",
@@ -1270,12 +1269,11 @@ static int mdss_fb_alloc_fb_ion_memory(struct msm_fb_data_type *mfd,
 		goto fb_mmap_failed;
 	}
 
-	pr_info("alloc 0x%xB vaddr = %p (%pa iova) for fb%d\n", fb_size, vaddr,
+	pr_debug("alloc 0x%xB vaddr = %p (%pa iova) for fb%d\n", size, vaddr,
 			&mfd->iova, mfd->index);
 
 	mfd->fbi->screen_base = (char *) vaddr;
-	mfd->fbi->fix.smem_start = (unsigned int) mfd->iova;
-	mfd->fbi->fix.smem_len = fb_size;
+	mfd->fbi->fix.smem_len = size;
 
 	return rc;
 
@@ -1315,14 +1313,14 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 	}
 
 	req_size = vma->vm_end - vma->vm_start;
-	fb_size = mfd->fbi->fix.smem_len;
+	fb_size = mfd->fbi->fix.line_length * mfd->fbi->var.yres * MDSS_FB_NUM;
 	if (req_size > fb_size) {
 		pr_warn("requested map is greater than framebuffer");
 		return -EOVERFLOW;
 	}
 
 	if (!mfd->fbi->screen_base) {
-		rc = mdss_fb_alloc_fb_ion_memory(mfd, fb_size);
+		rc = mdss_fb_alloc_fb_ion_memory(mfd);
 		if (rc < 0) {
 			pr_err("fb mmap failed!!!!");
 			return rc;
@@ -1333,10 +1331,12 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 	if (IS_ERR(table)) {
 		pr_err("Unable to get sg_table from ion:%ld\n", PTR_ERR(table));
 		mfd->fbi->screen_base = NULL;
+		mfd->fbi->fix.smem_len = 0;
 		return PTR_ERR(table);
 	} else if (!table) {
 		pr_err("sg_list is NULL\n");
 		mfd->fbi->screen_base = NULL;
+		mfd->fbi->fix.smem_len = 0;
 		return -EINVAL;
 	}
 
@@ -1594,6 +1594,8 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	mfd->panel_power_state = MDSS_PANEL_POWER_OFF;
 	mfd->dcm_state = DCM_UNINIT;
 
+	mdss_fb_parse_dt(mfd);
+
 	if (mdss_fb_alloc_fbmem(mfd))
 		pr_warn("unable to allocate fb memory in fb register\n");
 
@@ -1761,6 +1763,13 @@ static int mdss_fb_open(struct fb_info *info, int user)
 	pinfo->ref_cnt++;
 	mfd->ref_cnt++;
 
+	/* Stop the splash thread once userspace open the fb node */
+	if (mfd->splash_thread && mfd->ref_cnt > 1) {
+		kthread_stop(mfd->splash_thread);
+		mfd->splash_thread = NULL;
+		mdss_fb_free_fb_ion_memory(mfd);
+	}
+
 	return 0;
 
 blank_error:
@@ -1888,6 +1897,13 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 			if (ret)
 				pr_err("error fb%d release current process=%s pid=%d known pid=%d\n",
 				    mfd->index, task->comm, current->tgid, pid);
+		}
+
+		if (mfd->mdp.release_fnc) {
+			ret = mfd->mdp.release_fnc(mfd, true);
+			if (ret)
+				pr_err("error fb%d release process %s pid=%d\n",
+					mfd->index, task->comm, pid);
 		}
 
 		mdss_fb_free_fb_ion_memory(mfd);
