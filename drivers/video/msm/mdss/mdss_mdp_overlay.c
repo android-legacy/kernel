@@ -154,6 +154,24 @@ static struct mdss_mdp_pipe *__overlay_find_pipe(
 	return pipe;
 }
 
+static struct mdss_mdp_pipe *__overlay_find_pipe(
+		struct msm_fb_data_type *mfd, u32 ndx)
+{
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+	struct mdss_mdp_pipe *tmp, *pipe = NULL;
+
+	mutex_lock(&mdp5_data->list_lock);
+	list_for_each_entry(tmp, &mdp5_data->pipes_used, list) {
+		if (tmp->ndx == ndx) {
+			pipe = tmp;
+			break;
+		}
+	}
+	mutex_unlock(&mdp5_data->list_lock);
+
+	return pipe;
+}
+
 static int mdss_mdp_overlay_get(struct msm_fb_data_type *mfd,
 				struct mdp_overlay *req)
 {
@@ -166,76 +184,6 @@ static int mdss_mdp_overlay_get(struct msm_fb_data_type *mfd,
 	}
 
 	*req = pipe->req_data;
-
-	return 0;
-}
-
-static int mdss_mdp_ov_xres_check(struct msm_fb_data_type *mfd,
-	struct mdp_overlay *req)
-{
-	u32 xres = 0;
-	u32 left_lm_w = left_lm_w_from_mfd(mfd);
-	struct mdss_data_type *mdata = mfd_to_mdata(mfd);
-	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
-
-	if (IS_RIGHT_MIXER_OV(req->flags, req->dst_rect.x, left_lm_w)) {
-		if (mdata->has_src_split) {
-			xres = left_lm_w;
-
-			if (req->flags & MDSS_MDP_RIGHT_MIXER) {
-				pr_warn("invalid use of RIGHT_MIXER flag.\n");
-				/*
-				 * if chip-set is capable of source split then
-				 * all layers which are only on right LM should
-				 * have their x offset relative to left LM's
-				 * left-top or in other words relative to
-				 * panel width.
-				 * By modifying dst_x below, we are assuming
-				 * that client is running in legacy mode
-				 * chipset capable of source split.
-				 */
-				if (req->dst_rect.x < left_lm_w)
-					req->dst_rect.x += left_lm_w;
-
-				req->flags &= ~MDSS_MDP_RIGHT_MIXER;
-			}
-		} else if (req->dst_rect.x >= left_lm_w) {
-			/*
-			 * this is a step towards removing a reliance on
-			 * MDSS_MDP_RIGHT_MIXER flags. With the new src split
-			 * code, some clients of non-src-split chipsets have
-			 * stopped sending MDSS_MDP_RIGHT_MIXER flag and
-			 * modified their xres relative to full panel
-			 * dimensions. In such cases, we need to deduct left
-			 * layer mixer width before we programm this HW.
-			 */
-			req->dst_rect.x -= left_lm_w;
-			req->flags |= MDSS_MDP_RIGHT_MIXER;
-		}
-
-		if (ctl->mixer_right) {
-			xres += ctl->mixer_right->width;
-		} else {
-			pr_err("ov cannot be placed on right mixer\n");
-			return -EPERM;
-		}
-	} else {
-		if (ctl->mixer_left) {
-			xres = ctl->mixer_left->width;
-		} else {
-			pr_err("ov cannot be placed on left mixer\n");
-			return -EPERM;
-		}
-
-		if (mdata->has_src_split && ctl->mixer_right)
-			xres += ctl->mixer_right->width;
-	}
-
-	if (CHECK_BOUNDS(req->dst_rect.x, req->dst_rect.w, xres)) {
-		pr_err("dst_xres is invalid. dst_x:%d, dst_w:%d, xres:%d\n",
-			req->dst_rect.x, req->dst_rect.w, xres);
-		return -EOVERFLOW;
-	}
 
 	return 0;
 }
@@ -1761,6 +1709,44 @@ static int mdss_mdp_overlay_queue(struct msm_fb_data_type *mfd,
 	mdss_mdp_pipe_unmap(pipe);
 
 	return ret;
+}
+
+static void mdss_mdp_overlay_force_cleanup(struct msm_fb_data_type *mfd)
+{
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+	struct mdss_mdp_ctl *ctl = mdp5_data->ctl;
+	int ret;
+
+	pr_debug("forcing cleanup to unset dma pipes on fb%d\n", mfd->index);
+
+	/*
+	 * video mode panels require the layer to be unstaged and wait for
+	 * vsync to be able to release buffer.
+	 */
+	if (ctl && ctl->is_video_mode) {
+		ret = mdss_mdp_display_commit(ctl, NULL);
+		if (!IS_ERR_VALUE(ret))
+			mdss_mdp_display_wait4comp(ctl);
+	}
+
+	mdss_mdp_overlay_cleanup(mfd);
+}
+
+static void mdss_mdp_overlay_force_dma_cleanup(struct mdss_data_type *mdata)
+{
+	struct mdss_mdp_pipe *pipe;
+	int i;
+
+	for (i = 0; i < mdata->ndma_pipes; i++) {
+		pipe = mdata->dma_pipes + i;
+
+		if (!mdss_mdp_pipe_map(pipe)) {
+			struct msm_fb_data_type *mfd = pipe->mfd;
+			mdss_mdp_pipe_unmap(pipe);
+			if (mfd)
+				mdss_mdp_overlay_force_cleanup(mfd);
+		}
+	}
 }
 
 static int mdss_mdp_overlay_play(struct msm_fb_data_type *mfd,

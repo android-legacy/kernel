@@ -572,7 +572,7 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 
 	for (i = off; i < npipes; i++) {
 		pipe = pipe_pool + i;
-		if (atomic_cmpxchg(&pipe->ref_cnt, 0, 1) == 0) {
+		if (atomic_read(&pipe->kref.refcount) == 0) {
 			pipe->mixer_left = mixer;
 			break;
 		}
@@ -583,7 +583,6 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 	    pipe->priority <= left_blend_pipe->priority) {
 		pr_debug("priority limitation. l_pipe_prio:%d r_pipe_prio:%d\n",
 			left_blend_pipe->priority, pipe->priority);
-		atomic_dec(&pipe->ref_cnt);
 		return NULL;
 	}
 
@@ -757,43 +756,6 @@ static void mdss_mdp_pipe_free(struct kref *kref)
 	pipe->mfd = NULL;
 	pipe->mixer_left = pipe->mixer_right = NULL;
 	memset(&pipe->scale, 0, sizeof(struct mdp_scale_data));
-}
-
-static bool mdss_mdp_check_pipe_in_use(struct mdss_mdp_pipe *pipe)
-{
-	int i;
-	u32 mixercfg, stage_off_mask = BIT(0) | BIT(1) | BIT(2);
-	bool in_use = false;
-	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	struct mdss_mdp_ctl *ctl;
-	struct mdss_mdp_mixer *mixer;
-
-	if (pipe->num == MDSS_MDP_SSPP_VIG3 ||
-	    pipe->num == MDSS_MDP_SSPP_RGB3)
-		stage_off_mask = stage_off_mask << ((3 * pipe->num) + 2);
-	else
-		stage_off_mask = stage_off_mask << (3 * pipe->num);
-
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
-	for (i = 0; i < mdata->nctl; i++) {
-		ctl = mdata->ctl_off + i;
-		if (!ctl || !ctl->ref_cnt)
-			continue;
-
-		mixer = ctl->mixer_left;
-		if (mixer && mixer->rotator_mode)
-			continue;
-
-		mixercfg = mdss_mdp_get_mixercfg(mixer);
-		if ((mixercfg & stage_off_mask) && ctl->play_cnt) {
-			pr_err("BUG. pipe%d is active. mcfg:0x%x mask:0x%x\n",
-				pipe->num, mixercfg, stage_off_mask);
-			BUG();
-		}
-	}
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
-
-	return in_use;
 }
 
 static bool mdss_mdp_check_pipe_in_use(struct mdss_mdp_pipe *pipe)
