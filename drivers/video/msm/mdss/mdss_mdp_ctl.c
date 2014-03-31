@@ -25,6 +25,7 @@
 #include "mdss_mdp.h"
 #include "mdss_debug.h"
 #include "mdss_mdp_trace.h"
+#include "mdss_debug.h"
 
 static void mdss_mdp_xlog_mixer_reg(struct mdss_mdp_ctl *ctl);
 static inline u64 fudge_factor(u64 val, u32 numer, u32 denom)
@@ -960,7 +961,10 @@ static inline void mdss_mdp_ctl_perf_update_bus(struct mdss_data_type *mdata,
 	int i;
 	u32 bw_vote_mode = MDSS_MDP_BW_MODE_NONE;
 
+	if (!ctl || !ctl->mdata)
+		return;
 	ATRACE_BEGIN(__func__);
+	mdata = ctl->mdata;
 	for (i = 0; i < mdata->nctl; i++) {
 		struct mdss_mdp_ctl *ctl;
 		ctl = mdata->ctl_off + i;
@@ -986,8 +990,10 @@ static inline void mdss_mdp_ctl_perf_update_bus(struct mdss_data_type *mdata,
 	bus_ab_quota = apply_fudge_factor(bus_ib_quota,
 		&mdss_res->ab_factor);
 	trace_mdp_perf_update_bus(bus_ab_quota, bus_ib_quota);
+	ATRACE_INT("bus_quota", bus_ib_quota);
 	mdss_mdp_bus_scale_set_quota(bus_ab_quota, bus_ib_quota);
 	pr_debug("ab=%llu ib=%llu\n", bus_ab_quota, bus_ib_quota);
+	ATRACE_END(__func__);
 }
 
 /**
@@ -1149,6 +1155,7 @@ static void mdss_mdp_ctl_perf_update(struct mdss_mdp_ctl *ctl,
 		}
 
 		clk_rate  = mdss_mdp_select_clk_lvl(ctl, clk_rate);
+		ATRACE_INT("mdp_clk", clk_rate);
 		mdss_mdp_set_clk_rate(clk_rate);
 		pr_debug("update clk rate = %d HZ\n", clk_rate);
 	}
@@ -2761,8 +2768,6 @@ int mdss_mdp_display_wait4comp(struct mdss_mdp_ctl *ctl)
 
 	trace_mdp_commit(ctl);
 
-	trace_mdp_commit(ctl);
-
 	mdss_mdp_ctl_perf_update(ctl, 0);
 
 	if (IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev, MDSS_MDP_HW_REV_103)) {
@@ -2839,6 +2844,7 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 	if (is_bw_released || ctl->force_screen_state ||
 		(ctl->mixer_left && ctl->mixer_left->params_changed) ||
 		(ctl->mixer_right && ctl->mixer_right->params_changed)) {
+		ATRACE_BEGIN("prepare_fnc");
 		if (ctl->prepare_fnc)
 			ret = ctl->prepare_fnc(ctl, arg);
 		ATRACE_END("prepare_fnc");
@@ -2864,21 +2870,20 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 		ATRACE_END("mixer_programming");
 	}
 
+	ATRACE_BEGIN("frame_ready");
 	if (!ctl->shared_lock)
 		mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_READY);
+	ATRACE_END("frame_ready");
 
-	/*
-	 * With partial frame update, enable split display bit only
-	 * when validity of ROI's on both the DSI's are identical
-	 */
-	if (sctl) {
-		split_enable = (ctl->valid_roi == sctl->valid_roi);
-		mdss_mdp_ctl_split_display_enable(split_enable, ctl, sctl);
-	}
+	ATRACE_BEGIN("wait_pingpong");
+	if (ctl->wait_pingpong)
+		ctl->wait_pingpong(ctl, NULL);
+	ATRACE_END("wait_pingpong");
 
 	ctl->roi_bkup.w = ctl->roi.w;
 	ctl->roi_bkup.h = ctl->roi.h;
 
+	ATRACE_BEGIN("postproc_programming");
 	if (ctl->mfd && ctl->mfd->dcm_state != DTM_ENTER)
 		/* postprocessing setup, including dspp */
 		mdss_mdp_pp_setup_locked(ctl);
@@ -2888,41 +2893,6 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 		sctl->flush_bits = 0;
 	}
 	ATRACE_END("postproc_programming");
-
-	mdss_mdp_xlog_mixer_reg(ctl);
-
-	if (ctl->panel_data &&
-			ctl->panel_data->panel_info.partial_update_enabled) {
-		/*
-		 * update roi of panel_info which will be
-		 * used by dsi to set col_page addr of panel
-		 */
-		ctl->panel_data->panel_info.roi = ctl->roi;
-		if (sctl && sctl->panel_data)
-			sctl->panel_data->panel_info.roi = sctl->roi;
-	}
-
-	ATRACE_BEGIN("frame_ready");
-	mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_CONFIG_DONE);
-	if (commit_cb)
-		commit_cb->commit_cb_fnc(
-			MDP_COMMIT_STAGE_SETUP_DONE,
-			commit_cb->data);
-	mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_READY);
-	ATRACE_END("frame_ready");
-
-	if (ctl->wait_pingpong) {
-		ATRACE_BEGIN("wait_pingpong");
-		ctl->wait_pingpong(ctl, NULL);
-
-		if (sctl && sctl->wait_pingpong)
-			sctl->wait_pingpong(sctl, NULL);
-		ATRACE_END("wait_pingpong");
-	}
-	if (commit_cb)
-		commit_cb->commit_cb_fnc(MDP_COMMIT_STAGE_READY_FOR_KICKOFF,
-			commit_cb->data);
-
 	ATRACE_BEGIN("flush_kickoff");
 	mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_FLUSH, ctl->flush_bits);
 	if (sctl && sctl->flush_bits) {
