@@ -1603,7 +1603,6 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	atomic_set(&mfd->mdp_sync_pt_data.commit_cnt, 0);
 	atomic_set(&mfd->commits_pending, 0);
 	atomic_set(&mfd->ioctl_ref_cnt, 0);
-	atomic_set(&mfd->kickoff_pending, 0);
 
 	init_timer(&mfd->no_update.timer);
 	mfd->no_update.timer.function = mdss_fb_no_update_notify_timer_cb;
@@ -1617,7 +1616,6 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	init_waitqueue_head(&mfd->commit_wait_q);
 	init_waitqueue_head(&mfd->idle_wait_q);
 	init_waitqueue_head(&mfd->ioctl_q);
-	init_waitqueue_head(&mfd->kickoff_wait_q);
 
 	ret = fb_alloc_cmap(&fbi->cmap, 256, 0);
 	if (ret)
@@ -2859,6 +2857,7 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 	atomic_inc(&mfd->ioctl_ref_cnt);
 
 	mdss_fb_power_setting_idle(mfd);
+
 	if ((cmd != MSMFB_VSYNC_CTRL) && (cmd != MSMFB_OVERLAY_VSYNC_CTRL) &&
 			(cmd != MSMFB_ASYNC_BLIT) && (cmd != MSMFB_BLIT) &&
 			(cmd != MSMFB_NOTIFY_UPDATE) &&
@@ -2867,7 +2866,7 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		if (ret) {
 			pr_debug("Shutdown pending. Aborting operation %x\n",
 				cmd);
-			return ret;
+			goto exit;
 		}
 	}
 
@@ -2894,7 +2893,7 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		if (ret)
 			goto exit;
 
-		if ((!mfd->op_enable) || (mdss_fb_is_power_off(mfd))) {
+		if ((!mfd->op_enable) || (!mfd->panel_power_on)) {
 			ret = -EPERM;
 			goto exit;
 		}
