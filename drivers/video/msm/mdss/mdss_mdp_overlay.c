@@ -46,7 +46,14 @@
 #define PP_CLK_CFG_OFF 0
 #define PP_CLK_CFG_ON 1
 
+#define MEM_PROTECT_SD_CTRL 0xF
+
+#define INVALID_PIPE_INDEX 0xFFFF
 #define OVERLAY_MAX 10
+
+struct sd_ctrl_req {
+	unsigned int enable;
+} __attribute__ ((__packed__));
 
 static int mdss_mdp_overlay_free_fb_pipe(struct msm_fb_data_type *mfd);
 static int mdss_mdp_overlay_fb_parse_dt(struct msm_fb_data_type *mfd);
@@ -3059,7 +3066,8 @@ static int __handle_ioctl_overlay_prepare(struct msm_fb_data_type *mfd,
 	}
 
 	if (copy_from_user(req_list, ovlist.overlay_list,
-				sizeof(struct mdp_overlay*) * ovlist.num_overlays)) {
+				sizeof(struct mdp_overlay *) *
+				ovlist.num_overlays)) {
 		ret = -EFAULT;
 		goto validate_exit;
 	}
