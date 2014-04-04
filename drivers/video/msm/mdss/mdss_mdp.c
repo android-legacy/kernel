@@ -770,16 +770,27 @@ end:
  * Bus bandwidth is required by mdp.For dsi, it only requires to send
  * dcs coammnd. It returns error if bandwidth request fails.
  */
-void mdss_bus_bandwidth_ctrl(int enable)
+int mdss_bus_bandwidth_ctrl(int enable)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	static int bus_bw_cnt;
 	int changed = 0;
+	int rc = 0;
 
 	mutex_lock(&bus_bw_lock);
 	if (enable) {
-		if (bus_bw_cnt == 0)
+		if (bus_bw_cnt == 0) {
 			changed++;
+			if (!mdata->handoff_pending) {
+				rc = mdss_iommu_attach(mdata);
+				if (rc) {
+					pr_err("iommu attach failed rc=%d\n",
+									rc);
+					goto end;
+				}
+			}
+		}
+
 		bus_bw_cnt++;
 	} else {
 		if (bus_bw_cnt) {
@@ -807,7 +818,9 @@ void mdss_bus_bandwidth_ctrl(int enable)
 		}
 	}
 
+end:
 	mutex_unlock(&bus_bw_lock);
+	return rc;
 }
 EXPORT_SYMBOL(mdss_bus_bandwidth_ctrl);
 
@@ -815,7 +828,7 @@ void mdss_mdp_clk_ctrl(int enable, int isr)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	static int mdp_clk_cnt;
-	int changed = 0;
+	int changed = 0, rc;
 
 	mutex_lock(&mdp_clk_lock);
 	if (enable) {
@@ -848,10 +861,12 @@ void mdss_mdp_clk_ctrl(int enable, int isr)
 		if (mdata->vsync_ena)
 			mdss_mdp_clk_update(MDSS_CLK_MDP_VSYNC, enable);
 
-		if (!enable) {
-			pm_runtime_mark_last_busy(&mdata->pdev->dev);
-			pm_runtime_put_autosuspend(&mdata->pdev->dev);
-		}
+		rc = mdss_bus_bandwidth_ctrl(enable);
+		if (rc)
+			pr_err("bus bandwidth control failed rc=%d", rc);
+
+		if (!enable)
+			pm_runtime_put(&mdata->pdev->dev);
 	}
 
 	mutex_unlock(&mdp_clk_lock);
@@ -942,8 +957,6 @@ static int mdss_iommu_attach(struct mdss_data_type *mdata)
 	struct mdss_iommu_map_type *iomap;
 	int i, rc = 0;
 
-	MDSS_XLOG(mdata->iommu_attached);
-
 	mutex_lock(&mdp_iommu_lock);
 	MDSS_XLOG(mdata->iommu_attached);
 
@@ -975,6 +988,8 @@ static int mdss_iommu_attach(struct mdss_data_type *mdata)
 
 	mdata->iommu_attached = true;
 end:
+	mutex_unlock(&mdp_iommu_lock);
+
 	return rc;
 }
 
@@ -2858,22 +2873,31 @@ static void mdss_mdp_footswitch_ctrl(struct mdss_data_type *mdata, int on)
  * MDSS GDSC can be voted off during idle-screen usecase for MIPI DSI command
  * mode displays with Ultra-Low Power State (ULPS) feature enabled. Upon
  * subsequent frame update, MDSS GDSC needs to turned back on and hw state
- * needs to be restored.
+ * needs to be restored. It returns error if footswitch control API
+ * fails.
  */
-void mdss_mdp_footswitch_ctrl_ulps(int on, struct device *dev)
+int mdss_mdp_footswitch_ctrl_ulps(int on, struct device *dev)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	int rc = 0;
 
 	pr_debug("called on=%d\n", on);
 	if (on) {
 		pm_runtime_get_sync(dev);
-		mdss_iommu_attach(mdata);
+		rc = mdss_iommu_attach(mdata);
+		if (rc) {
+			pr_err("mdss iommu attach failed rc=%d\n", rc);
+			goto end;
+		}
 		mdss_hw_init(mdata);
 		mdata->ulps = false;
 	} else {
 		mdata->ulps = true;
 		pm_runtime_put_sync(dev);
 	}
+
+end:
+	return rc;
 }
 
 static inline int mdss_mdp_suspend_sub(struct mdss_data_type *mdata)
