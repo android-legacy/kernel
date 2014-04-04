@@ -86,6 +86,11 @@ struct tzbsp_video_set_state_req {
 #define IS_VENUS_IN_VALID_STATE(__device) (\
 		(__device)->state != VENUS_STATE_DEINIT)
 
+static int venus_hfi_power_enable(void *dev);
+
+#define IS_VENUS_IN_VALID_STATE(__device) (\
+		(__device)->state != VENUS_STATE_DEINIT)
+
 static void venus_hfi_pm_hndlr(struct work_struct *work);
 static DECLARE_DELAYED_WORK(venus_hfi_pm_work, venus_hfi_pm_hndlr);
 
@@ -1605,11 +1610,24 @@ static int venus_hfi_iface_cmdq_write_nolock(struct venus_hfi_device *device,
 	}
 	WARN(!mutex_is_locked(&device->write_lock),
 			"Cmd queue write lock must be acquired");
+	if (!IS_VENUS_IN_VALID_STATE(device)) {
+		dprintk(VIDC_ERR, "%s - fw not in init state\n", __func__);
+		result = -EINVAL;
+		goto err_q_null;
+	}
+
 	q_info = &device->iface_queues[VIDC_IFACEQ_CMDQ_IDX];
 	if (!q_info) {
 		dprintk(VIDC_ERR, "cannot write to shared Q's\n");
 		goto err_q_null;
 	}
+
+	if (!q_info->q_array.align_virtual_addr) {
+		dprintk(VIDC_ERR, "cannot write to shared CMD Q's\n");
+		result = -ENODATA;
+		goto err_q_null;
+	}
+
 	venus_hfi_sim_modify_cmd_packet((u8 *)pkt, device);
 	if (!venus_hfi_write_queue(q_info, (u8 *)pkt, &rx_req_is_set)) {
 		WARN(!mutex_is_locked(&device->clk_pwr_lock),
@@ -4011,6 +4029,10 @@ static int venus_hfi_resurrect_fw(void *dev)
 		return -EINVAL;
 	}
 
+	rc = venus_hfi_free_ocmem(device);
+	if (rc)
+		dprintk(VIDC_WARN, "%s - failed to free ocmem\n", __func__);
+
 	rc = venus_hfi_core_release(device);
 	if (rc) {
 		dprintk(VIDC_ERR, "%s - failed to release venus core rc = %d\n",
@@ -4023,8 +4045,8 @@ static int venus_hfi_resurrect_fw(void *dev)
 	venus_hfi_unload_fw(device);
 
 
-	rc = venus_hfi_vote_buses(device, device->bus_load.vote_data,
-			device->bus_load.vote_data_count);
+	rc = venus_hfi_vote_buses(device, device->bus_load,
+			device->res->bus_set.count);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to scale buses\n");
 		goto exit;

@@ -15,6 +15,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/kernel.h>
+#include <linux/workqueue.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <asm/div64.h>
 #include "msm_vidc_common.h"
@@ -1001,8 +1002,6 @@ struct sys_err_handler_data {
 
 void hw_sys_error_handler(struct work_struct *work)
 {
-	struct msm_vidc_cb_cmd_done *response = data;
-	struct msm_vidc_inst *inst = NULL;
 	struct msm_vidc_core *core = NULL;
 	struct hfi_device *hdev = NULL;
 	struct sys_err_handler_data *handler = NULL;
@@ -1018,12 +1017,13 @@ void hw_sys_error_handler(struct work_struct *work)
 	core = handler->core;
 	hdev = core->device;
 
-	mutex_lock(&core->lock);
+	mutex_lock(&core->sync_lock);
 	/*
 	* Restart the firmware to bring out of bad state.
 	*/
 	if ((core->state == VIDC_CORE_INVALID) &&
 		hdev->resurrect_fw) {
+		mutex_lock(&core->lock);
 		rc = call_hfi_op(hdev, resurrect_fw,
 				hdev->hfi_device_data);
 		if (rc) {
@@ -1032,11 +1032,12 @@ void hw_sys_error_handler(struct work_struct *work)
 				__func__, rc);
 		}
 		core->state = VIDC_CORE_LOADED;
+		mutex_unlock(&core->lock);
 	} else {
 		dprintk(VIDC_DBG,
 			"fw unloaded after sys error, no need to resurrect\n");
 	}
-	mutex_unlock(&core->lock);
+	mutex_unlock(&core->sync_lock);
 
 exit:
 	/* free sys error handler, allocated in handle_sys_err */
@@ -1069,11 +1070,14 @@ static void handle_sys_error(enum command_response cmd, void *data)
 	dprintk(VIDC_WARN, "SYS_ERROR %d received for core %p\n", cmd, core);
 	mutex_lock(&core->lock);
 	core->state = VIDC_CORE_INVALID;
+	mutex_unlock(&core->lock);
+
 
 	/*
 	* 1. Delete each instance session from hfi list
 	* 2. Notify all clients about hardware error.
 	*/
+	mutex_lock(&core->sync_lock);
 	list_for_each_entry(inst, &core->instances,
 			list) {
 		mutex_lock(&inst->lock);
@@ -1095,7 +1099,7 @@ static void handle_sys_error(enum command_response cmd, void *data)
 		msm_vidc_queue_v4l2_event(inst,
 				V4L2_EVENT_MSM_VIDC_SYS_ERROR);
 	}
-	mutex_unlock(&core->lock);
+	mutex_unlock(&core->sync_lock);
 
 
 	handler = kzalloc(sizeof(*handler), GFP_KERNEL);
@@ -2113,17 +2117,13 @@ static int msm_comm_init_core(struct msm_vidc_inst *inst)
 		goto fail_vote_bus;
 	}
 
-	mutex_lock(&core->lock);
 	if (core->state < VIDC_CORE_LOADED) {
 		rc = call_hfi_op(hdev, load_fw, hdev->hfi_device_data);
 		if (rc) {
 			dprintk(VIDC_ERR, "Failed to load video firmware\n");
 			goto fail_load_fw;
 		}
-		core->state = VIDC_CORE_LOADED;
-		dprintk(VIDC_DBG, "Firmware downloaded\n");
 	}
-	mutex_unlock(&core->lock);
 
 	rc = msm_comm_scale_clocks(core);
 	if (rc) {
@@ -2176,19 +2176,25 @@ static int msm_vidc_deinit_core(struct msm_vidc_inst *inst)
 				core->id, core->state);
 		goto core_already_uninited;
 	}
+
 	msm_comm_scale_clocks_and_bus(inst);
 	if (list_empty(&core->instances)) {
-		if (core->resources.ocmem_size) {
-			if (inst->state != MSM_VIDC_CORE_INVALID)
-				msm_comm_unset_ocmem(core);
-			call_hfi_op(hdev, free_ocmem, hdev->hfi_device_data);
-		}
-		dprintk(VIDC_DBG, "Calling vidc_hal_core_release\n");
-		rc = call_hfi_op(hdev, core_release, hdev->hfi_device_data);
-		if (rc) {
-			dprintk(VIDC_ERR, "Failed to release core, id = %d\n",
-							core->id);
-			goto exit;
+		if (core->state > VIDC_CORE_INIT) {
+			if (core->resources.ocmem_size) {
+				if (inst->state != MSM_VIDC_CORE_INVALID)
+					msm_comm_unset_ocmem(core);
+				call_hfi_op(hdev, free_ocmem,
+						hdev->hfi_device_data);
+			}
+			dprintk(VIDC_DBG, "Calling vidc_hal_core_release\n");
+			rc = call_hfi_op(hdev, core_release,
+					hdev->hfi_device_data);
+			if (rc) {
+				dprintk(VIDC_ERR,
+					"Failed to release core, id = %d\n",
+					core->id);
+				goto exit;
+			}
 		}
 		mutex_lock(&core->lock);
 		core->state = VIDC_CORE_UNINIT;
