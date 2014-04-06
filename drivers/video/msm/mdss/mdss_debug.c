@@ -434,18 +434,6 @@ static int mdss_debugfs_perf_init(struct mdss_debug_data *mdd,
 	debugfs_create_u64("min_bus_vote", 0644, mdd->perf,
 		(u64 *)&mdata->perf_tune.min_bus_vote);
 
-	debugfs_create_bool("enable_bw_release", 0644, mdd->perf,
-		(u32 *)&mdata->enable_bw_release);
-
-	debugfs_create_bool("enable_rotator_bw_release", 0644, mdd->perf,
-		(u32 *)&mdata->enable_rotator_bw_release);
-
-	debugfs_create_u64("min_uhd_bus_vote", 0644, mdd->perf,
-		(u64 *)&mdata->perf_tune.min_uhd_bus_vote);
-
-	debugfs_create_u64("min_qhd_bus_vote", 0644, mdd->perf,
-		(u64 *)&mdata->perf_tune.min_qhd_bus_vote);
-
 	debugfs_create_file("ab_factor", 0644, mdd->perf,
 		&mdata->ab_factor, &mdss_factor_fops);
 
@@ -505,11 +493,6 @@ int mdss_debugfs_init(struct mdss_data_type *mdata)
 
 	if (mdss_create_xlog_debug(mdd))
 		goto err;
-
-	if (mdss_create_xlog_debug(mdd)) {
-		mdss_debugfs_cleanup(mdd);
-		return -ENODEV;
-	}
 
 	mdata->debug_inf.debug_data = mdd;
 

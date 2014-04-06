@@ -74,8 +74,6 @@ struct mdss_fudge_factor {
 struct mdss_perf_tune {
 	unsigned long min_mdp_clk;
 	u64 min_bus_vote;
-	u64 min_uhd_bus_vote;
-	u64 min_qhd_bus_vote;
 };
 
 #define MDSS_IRQ_SUSPEND	-1
@@ -217,6 +215,7 @@ struct mdss_data_type {
 
 	int handoff_pending;
 	bool ulps;
+	struct mdss_perf_tune perf_tune;
 };
 extern struct mdss_data_type *mdss_res;
 
