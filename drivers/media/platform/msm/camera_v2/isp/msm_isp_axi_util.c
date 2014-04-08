@@ -1332,11 +1332,7 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 			vfe_dev->hw_info->vfe_ops.axi_ops.halt(vfe_dev);
 #endif
 		}
-#ifdef CONFIG_MACH_SONY_EAGLE
-		vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev, ISP_RST_SOFT, 1);
-#else
-		vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev, ISP_RST_SOFT);
-#endif
+		vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev, ISP_RST_HARD);
 		vfe_dev->hw_info->vfe_ops.core_ops.init_hw_reg(vfe_dev);
 		vfe_dev->ignore_error = 0;
 	}
