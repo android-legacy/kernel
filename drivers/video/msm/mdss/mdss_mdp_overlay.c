@@ -1466,6 +1466,9 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 		ATRACE_END("display_commit");
 	}
 
+	atomic_set(&mfd->kickoff_pending, 0);
+	wake_up_all(&mfd->kickoff_wait_q);
+
 	if (IS_ERR_VALUE(ret))
 		goto commit_fail;
 
@@ -1474,7 +1477,6 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 
 	ATRACE_BEGIN("display_wait4comp");
 	ret = mdss_mdp_display_wait4comp(mdp5_data->ctl);
-	ATRACE_END("display_wait4comp");
 	mutex_lock(&mdp5_data->ov_lock);
 
 	if (ret == 0) {
@@ -3853,9 +3855,6 @@ int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd)
 	}
 	mfd->mdp.private1 = mdp5_data;
 	mfd->wait_for_kickoff = true;
-
-	if (mfd->panel_info->partial_update_enabled && mfd->split_display)
-		mdp5_data->mdata->has_src_split = false;
 
 	rc = mdss_mdp_overlay_fb_parse_dt(mfd);
 	if (rc)
