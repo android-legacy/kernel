@@ -1034,45 +1034,27 @@ exit:
 	mutex_unlock(&mdss_mdp_ctl_lock);
 }
 
-static void mdss_mdp_perf_release_ctl_bw(struct mdss_mdp_ctl *ctl,
-	struct mdss_mdp_perf_params *perf)
+static int mdss_mdp_select_clk_lvl(struct mdss_mdp_ctl *ctl,
+			u32 clk_rate)
 {
-	/* Set to zero controller bandwidth. */
-	memset(perf, 0, sizeof(*perf));
-	ctl->perf_release_ctl_bw = false;
-}
+	int i;
+	struct mdss_data_type *mdata;
 
-u32 mdss_mdp_get_mdp_clk_rate(struct mdss_data_type *mdata)
-{
-	u32 clk_rate = 0;
-	uint i;
-	struct clk *clk = mdss_mdp_get_clk(MDSS_CLK_MDP_SRC);
+	if (!ctl)
+		return -ENODEV;
 
-	for (i = 0; i < mdata->nctl; i++) {
-		struct mdss_mdp_ctl *ctl;
-		ctl = mdata->ctl_off + i;
-		if (mdss_mdp_ctl_is_power_on(ctl)) {
-			clk_rate = max(ctl->cur_perf.mdp_clk_rate,
-							clk_rate);
-			clk_rate = clk_round_rate(clk, clk_rate);
+	mdata = ctl->mdata;
+
+	for (i = 0; i < mdata->nclk_lvl; i++) {
+		if (clk_rate > mdata->clock_levels[i]) {
+			continue;
+		} else {
+			clk_rate = mdata->clock_levels[i];
+			break;
 		}
 	}
 
-	pr_debug("clk:%u nctl:%d\n", clk_rate, mdata->nctl);
 	return clk_rate;
-}
-
-static bool is_traffic_shaper_enabled(struct mdss_data_type *mdata)
-{
-	uint i;
-	for (i = 0; i < mdata->nctl; i++) {
-		struct mdss_mdp_ctl *ctl;
-		ctl = mdata->ctl_off + i;
-		if (mdss_mdp_ctl_is_power_on(ctl))
-			if (ctl->traffic_shaper_enabled)
-				return true;
-	}
-	return false;
 }
 
 static void mdss_mdp_ctl_perf_update(struct mdss_mdp_ctl *ctl,
@@ -1152,7 +1134,18 @@ static void mdss_mdp_ctl_perf_update(struct mdss_mdp_ctl *ctl,
 	 * bandwidth is available before clock rate is increased.
 	 */
 	if (update_clk) {
-		ATRACE_INT("mdp_clk", clk_rate);
+		u32 clk_rate = 0;
+		int i;
+
+		for (i = 0; i < mdata->nctl; i++) {
+			struct mdss_mdp_ctl *ctl;
+			ctl = mdata->ctl_off + i;
+			if (ctl->power_on)
+				clk_rate = max(ctl->cur_perf.mdp_clk_rate,
+					       clk_rate);
+		}
+
+		clk_rate  = mdss_mdp_select_clk_lvl(ctl, clk_rate);
 		mdss_mdp_set_clk_rate(clk_rate);
 		pr_debug("update clk rate = %d HZ\n", clk_rate);
 	}
