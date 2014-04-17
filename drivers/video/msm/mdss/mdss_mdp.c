@@ -3050,8 +3050,7 @@ static int mdss_mdp_runtime_resume(struct device *dev)
 	if (!mdata)
 		return -ENODEV;
 
-	dev_dbg(dev, "pm_runtime: resuming. active overlay cnt=%d\n",
-		atomic_read(&mdata->active_intf_cnt));
+	dev_dbg(dev, "pm_runtime: resuming...\n");
 
 	/* do not resume panels when coming out of idle power collapse */
 	if (!mdata->idle_pc)
@@ -3086,6 +3085,9 @@ static int mdss_mdp_runtime_suspend(struct device *dev)
 		return -EBUSY;
 	}
 
+	/* do not suspend panels when going in to idle power collapse */
+	if (!mdata->idle_pc)
+		device_for_each_child(dev, &device_on, mdss_fb_suspres_panel);
 	mdss_mdp_footswitch_ctrl(mdata, false);
 	/* do not suspend panels when going in to idle power collapse */
 	if (!mdata->idle_pc)
