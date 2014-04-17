@@ -646,8 +646,8 @@ static inline struct mdss_mdp_misr_map *mdss_misr_get_map(u32 block_id,
 		return NULL;
 	}
 
-	pr_debug("MDP Module Offset of MISR_CTRL = 0x%d MISR SIG = 0x%d intf_base 0x%p\n",
-			map->ctrl_reg, map->value_reg, intf_base);
+	pr_debug("MISR Module(%d) CTRL(0x%x) SIG(0x%x) intf_base(0x%p)\n",
+			block_id, map->ctrl_reg, map->value_reg, intf_base);
 	return map;
 }
 
@@ -686,8 +686,11 @@ int mdss_misr_set(struct mdss_data_type *mdata,
 	u32 config = 0, val = 0;
 	u32 mixer_num = 0;
 	bool is_valid_wb_mixer = true;
+	bool use_mdp_up_misr = false;
 
 	map = mdss_misr_get_map(req->block_id, ctl, mdata);
+	use_mdp_up_misr = switch_mdp_misr_offset(map, mdata->mdp_rev,
+				req->block_id);
 	if (!map) {
 		pr_err("Invalid MISR Block=%d\n", req->block_id);
 		return -EINVAL;
@@ -718,10 +721,18 @@ int mdss_misr_set(struct mdss_data_type *mdata,
 			is_valid_wb_mixer = false;
 			break;
 		}
-		if (is_valid_wb_mixer &&
-				(mdata->mdp_rev < MDSS_MDP_HW_REV_106))
-			writel_relaxed(val, (mdata->mdp_base +
-						MDSS_MDP_LP_MISR_SEL));
+		if ((is_valid_wb_mixer) &&
+			(mdata->mdp_rev < MDSS_MDP_HW_REV_106)) {
+			if (use_mdp_up_misr)
+				writel_relaxed((val +
+					MDSS_MDP_UP_MISR_LMIX_SEL_OFFSET),
+					(mdata->mdp_base +
+					 MDSS_MDP_UP_MISR_SEL));
+			else
+				writel_relaxed(val,
+					(mdata->mdp_base +
+					MDSS_MDP_LP_MISR_SEL));
+		}
 	}
 	vsync_count = 0;
 	map->crc_op_mode = req->crc_op_mode;
@@ -762,6 +773,7 @@ int mdss_misr_get(struct mdss_data_type *mdata,
 	int i;
 
 	map = mdss_misr_get_map(resp->block_id, ctl, mdata);
+	switch_mdp_misr_offset(map, mdata->mdp_rev, resp->block_id);
 	if (!map) {
 		pr_err("Invalid MISR Block=%d\n", resp->block_id);
 		return -EINVAL;
@@ -834,6 +846,7 @@ void mdss_misr_crc_collect(struct mdss_data_type *mdata, int block_id)
 	bool crc_stored = false;
 
 	map = mdss_misr_get_map(block_id, NULL, mdata);
+	switch_mdp_misr_offset(map, mdata->mdp_rev, block_id);
 	if (!map || (map->crc_op_mode != MISR_OP_BM))
 		return;
 
