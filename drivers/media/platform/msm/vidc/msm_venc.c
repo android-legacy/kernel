@@ -2369,7 +2369,7 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_USELTRFRAME:
 		property_id = HAL_CONFIG_VENC_USELTRFRAME;
-		useltr.refltr = ctrl->val;
+		useltr.refltr = (1 << ctrl->val);
 		useltr.useconstrnt = false;
 		useltr.frames = 0;
 		pdata = &useltr;
