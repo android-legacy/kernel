@@ -152,21 +152,13 @@ struct msm_vfe_axi_ops {
 	uint32_t (*get_wm_mask) (uint32_t irq_status0, uint32_t irq_status1);
 	uint32_t (*get_comp_mask) (uint32_t irq_status0, uint32_t irq_status1);
 	uint32_t (*get_pingpong_status) (struct vfe_device *vfe_dev);
-#ifdef CONFIG_MACH_SONY_EAGLE
 	long (*halt) (struct vfe_device *vfe_dev, uint32_t blocking);
-#else
-	long (*halt) (struct vfe_device *vfe_dev);
-#endif
 };
 
 struct msm_vfe_core_ops {
 	void (*reg_update) (struct vfe_device *vfe_dev);
 	long (*reset_hw) (struct vfe_device *vfe_dev,
-#ifdef CONFIG_MACH_SONY_EAGLE
 		enum msm_isp_reset_type reset_type, uint32_t blocking);
-#else
-		enum msm_isp_reset_type reset_type);
-#endif
 	int (*init_hw) (struct vfe_device *vfe_dev);
 	void (*init_hw_reg) (struct vfe_device *vfe_dev);
 	void (*release_hw) (struct vfe_device *vfe_dev);
@@ -180,14 +172,12 @@ struct msm_vfe_core_ops {
 	int (*get_platform_data) (struct vfe_device *vfe_dev);
 	void (*get_error_mask) (uint32_t *error_mask0, uint32_t *error_mask1);
 	void (*process_error_status) (struct vfe_device *vfe_dev);
-#ifdef CONFIG_MACH_SONY_EAGLE
 	void (*get_overflow_mask) (uint32_t *overflow_mask);
 	void (*get_irq_mask) (struct vfe_device *vfe_dev,
 		uint32_t *irq0_mask, uint32_t *irq1_mask);
 	void (*restore_irq_mask) (struct vfe_device *vfe_dev);
 	void (*get_halt_restart_mask) (uint32_t *irq0_mask,
 		uint32_t *irq1_mask);
-#endif
 };
 struct msm_vfe_stats_ops {
 	int (*get_stats_idx) (enum msm_isp_stats_type stats_type);
@@ -322,6 +312,15 @@ struct msm_vfe_axi_stream {
 	uint32_t runtime_num_burst_capture;
 	uint8_t runtime_framedrop_update;
 	uint32_t runtime_output_format;
+	enum msm_vfe_frame_skip_pattern frame_skip_pattern;
+
+};
+
+enum msm_vfe_overflow_state {
+	NO_OVERFLOW,
+	OVERFLOW_DETECTED,
+	HALT_REQUESTED,
+	RESTART_REQUESTED,
 };
 
 struct msm_vfe_axi_composite_info {
@@ -426,11 +425,9 @@ enum msm_vfe_overflow_state {
 #endif
 
 struct msm_vfe_error_info {
-#ifdef CONFIG_MACH_SONY_EAGLE
 	atomic_t overflow_state;
 	uint32_t overflow_recover_irq_mask0;
 	uint32_t overflow_recover_irq_mask1;
-#endif
 	uint32_t error_mask0;
 	uint32_t error_mask1;
 	uint32_t violation_status;

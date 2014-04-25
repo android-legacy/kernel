@@ -1014,7 +1014,6 @@ static inline void msm_isp_update_error_info(struct vfe_device *vfe_dev,
 	vfe_dev->error_info.error_count++;
 }
 
-#ifdef CONFIG_MACH_SONY_EAGLE
 static inline void msm_isp_process_overflow_irq(
 	struct vfe_device *vfe_dev,
 	uint32_t *irq_status0, uint32_t *irq_status1)
@@ -1038,9 +1037,9 @@ static inline void msm_isp_process_overflow_irq(
 	overflow_mask &= *irq_status1;
 	if (overflow_mask) {
 		pr_warning("%s: Bus overflow detected: 0x%x\n",
-				__func__, overflow_mask);
+			__func__, overflow_mask);
 		atomic_set(&vfe_dev->error_info.overflow_state,
-				OVERFLOW_DETECTED);
+			OVERFLOW_DETECTED);
 		pr_warning("%s: Start bus overflow recovery\n", __func__);
 		/*Store current IRQ mask*/
 		vfe_dev->hw_info->vfe_ops.core_ops.get_irq_mask(vfe_dev,
@@ -1048,7 +1047,7 @@ static inline void msm_isp_process_overflow_irq(
 			&vfe_dev->error_info.overflow_recover_irq_mask1);
 		/*Stop CAMIF Immediately*/
 		vfe_dev->hw_info->vfe_ops.core_ops.
-			update_camif_state(vfe_dev, DISABLE_CAMIF_IMMEDIATELY_VFE_RECOVER);
+			update_camif_state(vfe_dev, DISABLE_CAMIF_IMMEDIATELY);
 		/*Halt the hardware & Clear all other IRQ mask*/
 		vfe_dev->hw_info->vfe_ops.axi_ops.halt(vfe_dev, 0);
 		/*Update overflow state*/
@@ -1082,7 +1081,7 @@ static inline void msm_isp_reset_burst_count(
 	}
 }
 
-static inline void msm_isp_process_overflow_recovery(
+static void msm_isp_process_overflow_recovery(
 	struct vfe_device *vfe_dev,
 	uint32_t irq_status0, uint32_t irq_status1)
 {
@@ -1099,7 +1098,8 @@ static inline void msm_isp_process_overflow_recovery(
 	case HALT_REQUESTED: {
 		pr_err("%s: Halt done, Restart Pending\n", __func__);
 		/*Reset the hardware*/
-		vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev, ISP_RST_SOFT, 0);
+		vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev,
+			ISP_RST_SOFT, 0);
 		/*Update overflow state*/
 		atomic_set(&vfe_dev->error_info.overflow_state,
 				RESTART_REQUESTED);
@@ -1132,7 +1132,6 @@ static inline void msm_isp_process_overflow_recovery(
 		break;
 	}
 }
-#endif
 
 irqreturn_t msm_isp_process_irq(int irq_num, void *data)
 {
@@ -1144,10 +1143,8 @@ irqreturn_t msm_isp_process_irq(int irq_num, void *data)
 
 	vfe_dev->hw_info->vfe_ops.irq_ops.
 		read_irq_status(vfe_dev, &irq_status0, &irq_status1);
-#ifdef CONFIG_MACH_SONY_EAGLE
 	msm_isp_process_overflow_irq(vfe_dev,
 		&irq_status0, &irq_status1);
-#endif
 	vfe_dev->hw_info->vfe_ops.core_ops.
 		get_error_mask(&error_mask0, &error_mask1);
 	error_mask0 &= irq_status0;
@@ -1212,15 +1209,13 @@ void msm_isp_do_tasklet(unsigned long data)
 		irq_status1 = queue_cmd->vfeInterruptStatus1;
 		ts = queue_cmd->ts;
 		spin_unlock_irqrestore(&vfe_dev->tasklet_lock, flags);
-#ifdef CONFIG_MACH_SONY_EAGLE
 		if (atomic_read(&vfe_dev->error_info.overflow_state) !=
 			NO_OVERFLOW) {
-			pr_err("There is overflow, kickup recovery!!!!");
+			pr_err("There is Overflow, kicking up recovery !!!!");
 			msm_isp_process_overflow_recovery(vfe_dev,
 				irq_status0, irq_status1);
 			continue;
 		}
-#endif
 		ISP_DBG("%s: status0: 0x%x status1: 0x%x\n",
 			__func__, irq_status0, irq_status1);
 		irq_ops->process_reset_irq(vfe_dev,
@@ -1271,14 +1266,10 @@ int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		return -EBUSY;
 	}
 
-#ifndef CONFIG_MACH_SONY_EAGLE
-	rc = vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev, ISP_RST_HARD);
-#else
 	memset(&vfe_dev->error_info, 0, sizeof(vfe_dev->error_info));
 	atomic_set(&vfe_dev->error_info.overflow_state, NO_OVERFLOW);
-
-	rc = vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev, ISP_RST_HARD, 1);
-#endif
+	rc = vfe_dev->hw_info->vfe_ops.core_ops.reset_hw(vfe_dev,
+		ISP_RST_HARD, 1);
 	if (rc <= 0) {
 		pr_err("%s: reset timeout\n", __func__);
 		mutex_unlock(&vfe_dev->core_mutex);
@@ -1332,9 +1323,7 @@ int msm_isp_close_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 		return -ENODEV;
 	}
 
-#ifdef CONFIG_MACH_SONY_EAGLE
 	rc = vfe_dev->hw_info->vfe_ops.axi_ops.halt(vfe_dev, 1);
-#endif
 	if (rc <= 0)
 		pr_err("%s: halt timeout rc=%ld\n", __func__, rc);
 
