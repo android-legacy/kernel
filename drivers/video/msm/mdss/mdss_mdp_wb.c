@@ -484,7 +484,6 @@ static struct mdss_mdp_wb_data *get_user_node(struct msm_fb_data_type *mfd,
 		goto fail_freebuf;
 	}
 
-	buf = &node->buf_data.p[0];
 	pr_debug("register node mem_id=%d offset=%u addr=0x%pa len=%lu\n",
 		 data->memory_id, data->offset, &buf->addr, buf->len);
 

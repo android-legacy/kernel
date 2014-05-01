@@ -534,7 +534,7 @@ static int mdss_mdp_get_img(struct msmfb_data *img,
 	struct ion_client *iclient = mdss_get_ionclient();
 
 	start = &data->addr;
-	len = (unsigned long *) &data->len;
+	len = &data->len;
 	data->flags |= img->flags;
 	data->p_need = 0;
 	data->offset = img->offset;
@@ -654,7 +654,7 @@ static int mdss_mdp_map_buffer(struct mdss_mdp_img_data *data)
 		data->addr += data->offset;
 		data->len -= data->offset;
 
-		pr_debug("ihdl=%p buf=0x%pa len=0x%lu\n",
+		pr_debug("mem=%d ihdl=%p buf=0x%pa len=%lu\n", img->memory_id,
 			 data->srcp_ihdl, &data->addr, data->len);
 	} else {
 		mdss_mdp_put_img(data);
