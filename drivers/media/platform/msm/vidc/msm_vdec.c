@@ -1090,7 +1090,7 @@ int msm_vdec_s_parm(struct msm_vidc_inst *inst, struct v4l2_streamparm *a)
 		dprintk(VIDC_PROF, "reported fps changed for %p: %d->%d\n",
 				inst, inst->prop.fps, fps);
 		inst->prop.fps = fps;
-		msm_comm_init_dcvs_load(inst);
+
 		msm_comm_scale_clocks_and_bus(inst);
 	}
 exit:
