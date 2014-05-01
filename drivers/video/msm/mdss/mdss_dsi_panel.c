@@ -107,7 +107,7 @@ u32 mdss_dsi_panel_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl, char cmd0,
 	struct mdss_panel_info *pinfo;
 
 	pinfo = &(ctrl->panel_data.panel_info);
-	if (pinfo->dcs_cmd_by_left) {
+	if (pinfo->partial_update_dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			return -EINVAL;
 	}
@@ -136,7 +136,7 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	struct mdss_panel_info *pinfo;
 
 	pinfo = &(ctrl->panel_data.panel_info);
-	if (pinfo->dcs_cmd_by_left) {
+	if (pinfo->partial_update_dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			return;
 	}
@@ -168,7 +168,7 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	struct mdss_panel_info *pinfo;
 
 	pinfo = &(ctrl->panel_data.panel_info);
-	if (pinfo->dcs_cmd_by_left) {
+	if (pinfo->partial_update_dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			return;
 	}
@@ -369,35 +369,6 @@ static struct dsi_cmd_desc set_col_page_addr_cmd[] = {
 	{{DTYPE_DCS_LWRITE, 1, 0, 0, 1, sizeof(paset)}, paset},
 };
 
-static void send_col_page_addr(struct mdss_dsi_ctrl_pdata *ctrl,
-					struct mdss_rect *roi)
-{
-	struct dcs_cmd_req cmdreq;
-
-	roi = &ctrl->roi;
-
-	caset[1] = (((roi->x) & 0xFF00) >> 8);
-	caset[2] = (((roi->x) & 0xFF));
-	caset[3] = (((roi->x - 1 + roi->w) & 0xFF00) >> 8);
-	caset[4] = (((roi->x - 1 + roi->w) & 0xFF));
-	set_col_page_addr_cmd[0].payload = caset;
-
-	paset[1] = (((roi->y) & 0xFF00) >> 8);
-	paset[2] = (((roi->y) & 0xFF));
-	paset[3] = (((roi->y - 1 + roi->h) & 0xFF00) >> 8);
-	paset[4] = (((roi->y - 1 + roi->h) & 0xFF));
-	set_col_page_addr_cmd[1].payload = paset;
-
-	memset(&cmdreq, 0, sizeof(cmdreq));
-	cmdreq.cmds_cnt = 2;
-	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL | CMD_REQ_UNICAST;
-	cmdreq.rlen = 0;
-	cmdreq.cb = NULL;
-
-	cmdreq.cmds = set_col_page_addr_cmd;
-	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
-}
-
 static int mdss_dsi_set_col_page_addr(struct mdss_panel_data *pdata)
 {
 	struct mdss_panel_info *pinfo;
@@ -405,7 +376,7 @@ static int mdss_dsi_set_col_page_addr(struct mdss_panel_data *pdata)
 	struct mdss_rect *p_roi;
 	struct mdss_rect *c_roi;
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
-	struct mdss_dsi_ctrl_pdata *other = NULL;
+	struct dcs_cmd_req cmdreq;
 	int left_or_both = 0;
 
 	if (pdata == NULL) {
@@ -418,31 +389,14 @@ static int mdss_dsi_set_col_page_addr(struct mdss_panel_data *pdata)
 
 	pinfo = &pdata->panel_info;
 	p_roi = &pinfo->roi;
+	c_roi = &ctrl->roi;
 
-	/*
-	 * to avoid keep sending same col_page info to panel,
-	 * if roi_merge enabled, the roi of left ctrl is used
-	 * to compare against new merged roi and saved new
-	 * merged roi to it after comparing.
-	 * if roi_merge disabled, then the calling ctrl's roi
-	 * and pinfo's roi are used to compare.
-	 */
-	if (pinfo->partial_update_roi_merge) {
-		left_or_both = mdss_dsi_roi_merge(ctrl, &roi);
-		other = mdss_dsi_get_ctrl_by_index(DSI_CTRL_LEFT);
-		c_roi = &other->roi;
-	} else {
-		c_roi = &ctrl->roi;
-		roi = *p_roi;
-	}
-
-	/* roi had changed, do col_page update */
-	if (!mdss_rect_cmp(c_roi, &roi)) {
-		pr_debug("%s: ndx=%d x=%d y=%d w=%d h=%d\n",
+	if (!mdss_rect_cmp(c_roi, p_roi)) {
+			pr_debug("%s: ndx=%d x=%d y=%d w=%d h=%d\n",
 				__func__, ctrl->ndx, p_roi->x,
 				p_roi->y, p_roi->w, p_roi->h);
 
-		*c_roi = roi; /* keep to ctrl */
+		*c_roi = *p_roi;	/* keep to ctrl */
 		if (c_roi->w == 0 || c_roi->h == 0) {
 			/* no new frame update */
 			pr_debug("%s: ctrl=%d, no partial roi set\n",
@@ -450,39 +404,43 @@ static int mdss_dsi_set_col_page_addr(struct mdss_panel_data *pdata)
 			return 0;
 		}
 
-		if (pinfo->dcs_cmd_by_left) {
+		roi = *c_roi;
+
+		if (pinfo->partial_update_roi_merge)
+			left_or_both = mdss_dsi_roi_merge(ctrl, &roi);
+
+		if (pinfo->partial_update_dcs_cmd_by_left) {
 			if (left_or_both && ctrl->ndx == DSI_CTRL_RIGHT) {
 				/* 2A/2B sent by left already */
 				return 0;
 			}
 		}
 
-		if (!mdss_dsi_sync_wait_enable(ctrl)) {
-			if (pinfo->dcs_cmd_by_left)
-				ctrl = mdss_dsi_get_ctrl_by_index(
-							DSI_CTRL_LEFT);
-			send_col_page_addr(ctrl, &roi);
-		} else {
-			/*
-			 * when sync_wait_broadcast enabled,
-			 * need trigger at right ctrl to
-			 * start both dcs cmd transmission
-			 */
-			other = mdss_dsi_get_other_ctrl(ctrl);
-			if (!other)
-				goto end;
+		caset[1] = (((roi.x) & 0xFF00) >> 8);
+		caset[2] = (((roi.x) & 0xFF));
+		caset[3] = (((roi.x - 1 + roi.w) & 0xFF00) >> 8);
+		caset[4] = (((roi.x - 1 + roi.w) & 0xFF));
+		set_col_page_addr_cmd[0].payload = caset;
 
-			if (mdss_dsi_is_left_ctrl(ctrl)) {
-				send_col_page_addr(ctrl, &ctrl->roi);
-				send_col_page_addr(other, &other->roi);
-			} else {
-				send_col_page_addr(other, &other->roi);
-				send_col_page_addr(ctrl, &ctrl->roi);
-			}
-		}
+		paset[1] = (((roi.y) & 0xFF00) >> 8);
+		paset[2] = (((roi.y) & 0xFF));
+		paset[3] = (((roi.y - 1 + roi.h) & 0xFF00) >> 8);
+		paset[4] = (((roi.y - 1 + roi.h) & 0xFF));
+		set_col_page_addr_cmd[1].payload = paset;
+
+		memset(&cmdreq, 0, sizeof(cmdreq));
+		cmdreq.cmds = set_col_page_addr_cmd;
+		cmdreq.cmds_cnt = 2;
+		cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
+		cmdreq.rlen = 0;
+		cmdreq.cb = NULL;
+
+		if (pinfo->partial_update_dcs_cmd_by_left)
+			ctrl = mdss_dsi_get_ctrl_by_index(DSI_CTRL_LEFT);
+
+		mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 	}
 
-end:
 	return 0;
 }
 
@@ -577,15 +535,17 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	}
 
 	pinfo = &pdata->panel_info;
+
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+	if (pinfo->partial_update_dcs_cmd_by_left) {
+		if (ctrl->ndx != DSI_CTRL_LEFT)
+			return 0;
+	}
+
 	pr_debug("%s: ctrl=%p ndx=%d\n", __func__, ctrl, ctrl->ndx);
 
-	if (pinfo->dcs_cmd_by_left) {
-		if (ctrl->ndx != DSI_CTRL_LEFT)
-			goto end;
-	}
 
 	if (ctrl->on_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
@@ -607,8 +567,14 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	}
 
 	pinfo = &pdata->panel_info;
+
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
+
+	if (pinfo->partial_update_dcs_cmd_by_left) {
+		if (ctrl->ndx != DSI_CTRL_LEFT)
+			return 0;
+	}
 
 	pr_debug("%s: ctrl=%p ndx=%d\n", __func__, ctrl, ctrl->ndx);
 
@@ -1022,12 +988,21 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 	pinfo->cont_splash_enabled = of_property_read_bool(np,
 		"qcom,cont-splash-enabled");
 
-	pinfo->partial_update_enabled = of_property_read_bool(np,
-		"qcom,partial-update-enabled");
-	pr_info("%s:%d Partial update %s\n", __func__, __LINE__,
-		(pinfo->partial_update_enabled ? "enabled" : "disabled"));
-	if (pinfo->partial_update_enabled)
-		ctrl->partial_update_fnc = mdss_dsi_panel_partial_update;
+	if (pinfo->mipi.mode == DSI_CMD_MODE) {
+		pinfo->partial_update_enabled = of_property_read_bool(np,
+				"qcom,partial-update-enabled");
+		pr_info("%s: partial_update_enabled=%d\n", __func__,
+					pinfo->partial_update_enabled);
+		if (pinfo->partial_update_enabled) {
+			ctrl->set_col_page_addr = mdss_dsi_set_col_page_addr;
+			pinfo->partial_update_dcs_cmd_by_left =
+					of_property_read_bool(np,
+					"qcom,partial-update-dcs-cmd-by-left");
+			pinfo->partial_update_roi_merge =
+					of_property_read_bool(np,
+					"qcom,partial-update-roi-merge");
+		}
+	}
 
 	pinfo->ulps_feature_enabled = of_property_read_bool(np,
 		"qcom,ulps-enabled");
@@ -1056,6 +1031,49 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 		pinfo->mipi.dynamic_switch_enabled);
 
 	return 0;
+}
+
+static void mdss_dsi_parse_panel_horizintal_line_idle(struct device_node *np,
+	struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	const u32 *src;
+	int i, len, cnt;
+	struct panel_horizontal_idle *kp;
+
+	if (!np || !ctrl) {
+		pr_err("%s: Invalid arguments\n", __func__);
+		return;
+	}
+
+	src = of_get_property(np, "qcom,mdss-dsi-hor-line-idle", &len);
+	if (!src || len == 0)
+		return;
+
+	cnt = len % 3; /* 3 fields per entry */
+	if (cnt) {
+		pr_err("%s: invalid horizontal idle len=%d\n", __func__, len);
+		return;
+	}
+
+	cnt = len / sizeof(u32);
+
+	kp = kzalloc(sizeof(*kp) * (cnt / 3), GFP_KERNEL);
+	if (kp == NULL) {
+		pr_err("%s: No memory\n", __func__);
+		return;
+	}
+
+	ctrl->line_idle = kp;
+	for (i = 0; i < cnt; i += 3) {
+		kp->min = be32_to_cpu(src[i]);
+		kp->max = be32_to_cpu(src[i+1]);
+		kp->idle = be32_to_cpu(src[i+2]);
+		kp++;
+		ctrl->horizontal_idle_cnt++;
+	}
+
+	pr_debug("%s: horizontal_idle_cnt=%d\n", __func__,
+				ctrl->horizontal_idle_cnt);
 }
 
 static int mdss_panel_parse_dt(struct device_node *np,
@@ -1367,6 +1385,8 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		pr_err("%s: failed to parse panel features\n", __func__);
 		goto error;
 	}
+
+	mdss_dsi_parse_panel_horizintal_line_idle(np, ctrl_pdata);
 
 	return 0;
 

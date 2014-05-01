@@ -1104,18 +1104,9 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 	src = pipe->src;
 
 	if ((pipe->mixer_left->type != MDSS_MDP_MIXER_TYPE_WRITEBACK) &&
-	    !pipe->mixer_left->ctl->is_video_mode &&
-	    !pipe->src_split_req)
-		mdss_mdp_crop_rect(&src, &dst, &sci);
-		if (pipe->flags & MDP_FLIP_LR) {
-			src.x = pipe->src.x + (pipe->src.x + pipe->src.w)
-				- (src.x + src.w);
-		}
-		if (pipe->flags & MDP_FLIP_UD) {
-			src.y = pipe->src.y + (pipe->src.y + pipe->src.h)
-				- (src.y + src.h);
-		}
-	}
+		!pipe->mixer_left->ctl->is_video_mode &&
+		!pipe->src_split_req)
+			mdss_mdp_crop_rect(&src, &dst, &sci);
 
 	src_size = (src.h << 16) | src.w;
 	src_xy = (src.y << 16) | src.x;

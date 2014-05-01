@@ -1401,7 +1401,10 @@ need_lock:
 		if (!roi || (roi->w != 0 || roi->h != 0))
 			mdss_dsi_cmd_mdp_start(ctrl);
 
-		mutex_unlock(&ctrl->cmd_mutex);
+	if (from_mdp) { /* from pipe_commit */
+		/* acquire lock only has new frame update */
+		if (ctrl->roi.w != 0 || ctrl->roi.h != 0)
+			mdss_dsi_cmd_mdp_start(ctrl);
 	}
 
 	MDSS_XLOG(ctrl->ndx, from_mdp, ctrl->mdp_busy, current->pid,
