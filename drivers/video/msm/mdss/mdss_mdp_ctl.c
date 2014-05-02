@@ -369,12 +369,12 @@ static inline bool mdss_mdp_is_single_pipe_per_mixer(
  */
 int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	struct mdss_mdp_perf_params *perf, struct mdss_rect *roi,
-	bool apply_fudge, bool is_single_layer)
+	bool apply_fudge)
 {
 	struct mdss_mdp_mixer *mixer;
 	int fps = DEFAULT_FRAME_RATE;
 	u32 quota, rate, v_total, src_h, xres = 0, h_total = 0;
-	struct mdss_mdp_img_rect src, dst;
+	struct mdss_rect src, dst;
 	bool is_fbc = false;
 	struct mdss_mdp_prefill_params prefill_params;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
@@ -2141,12 +2141,30 @@ int mdss_mdp_ctl_reset(struct mdss_mdp_ctl *ctl)
 
 void mdss_mdp_set_mixer_roi(struct mdss_mdp_ctl *ctl, struct mdss_rect *roi)
 {
-	struct mdss_rect mixer_roi;
+	struct mdss_rect temp_roi, mixer_roi;
+
+	temp_roi.x =  data->roi.x;
+	temp_roi.y =  data->roi.y;
+	temp_roi.w =  data->roi.w;
+	temp_roi.h =  data->roi.h;
+
+	/*
+	 * No Partial Update for:
+	 * 1) dual DSI panels
+	 * 2) non-cmd mode panels
+	*/
+	if (!temp_roi.w || !temp_roi.h || ctl->mixer_right ||
+			(ctl->panel_data->panel_info.type != MIPI_CMD_PANEL) ||
+			!ctl->panel_data->panel_info.partial_update_enabled) {
+		temp_roi = (struct mdss_rect)
+				{0, 0, ctl->mixer_left->width,
+					ctl->mixer_left->height};
+	}
 
 	ctl->valid_roi = (roi->w && roi->h);
 	ctl->roi_changed = 0;
-	if (!mdss_rect_cmp(roi, &ctl->roi)) {
-		ctl->roi = *roi;
+	if (!mdss_rect_cmp(&temp_roi, &ctl->roi)) {
+		ctl->roi = temp_roi;
 		ctl->roi_changed++;
 
 		mixer_roi = ctl->mixer_left->roi;

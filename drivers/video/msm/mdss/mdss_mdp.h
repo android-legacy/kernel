@@ -206,8 +206,8 @@ struct mdss_mdp_ctl {
 	struct work_struct recover_work;
 	struct work_struct remove_underrun_handler;
 
-	struct mdss_mdp_img_rect roi;
-	struct mdss_mdp_img_rect roi_bkup;
+	struct mdss_rect roi;
+	struct mdss_rect roi_bkup;
 	u8 roi_changed;
 	u8 valid_roi;
 
@@ -673,8 +673,7 @@ int mdss_mdp_perf_bw_check_pipe(struct mdss_mdp_perf_params *perf,
 		struct mdss_mdp_pipe *pipe);
 int mdss_mdp_perf_calc_pipe(struct mdss_mdp_pipe *pipe,
 	struct mdss_mdp_perf_params *perf, struct mdss_rect *roi,
-	bool apply_fudge, bool is_single_layer);
-u32 mdss_mdp_get_mdp_clk_rate(struct mdss_data_type *mdata);
+	bool apply_fudge);
 int mdss_mdp_ctl_notify(struct mdss_mdp_ctl *ctl, int event);
 void mdss_mdp_ctl_notifier_register(struct mdss_mdp_ctl *ctl,
 	struct notifier_block *notifier);
