@@ -84,19 +84,18 @@ static inline u32 mdss_mdp_cmd_line_count(struct mdss_mdp_ctl *ctl)
 		}
 	}
 
-	init = mdss_mdp_pingpong_read
-		(mixer, MDSS_MDP_REG_PP_VSYNC_INIT_VAL) & 0xffff;
-
-	height = mdss_mdp_pingpong_read
-		(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT) & 0xffff;
+	init = mdss_mdp_pingpong_read(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_VSYNC_INIT_VAL) & 0xffff;
+	height = mdss_mdp_pingpong_read(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT) & 0xffff;
 
 	if (height < init) {
 		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 		goto exit;
 	}
 
-	cnt = mdss_mdp_pingpong_read
-		(mixer, MDSS_MDP_REG_PP_INT_COUNT_VAL) & 0xffff;
+	cnt = mdss_mdp_pingpong_read(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_INT_COUNT_VAL) & 0xffff;
 
 	if (cnt < init)		/* wrap around happened at height */
 		cnt += (height - init);
@@ -160,21 +159,22 @@ static int mdss_mdp_cmd_tearcheck_cfg(struct mdss_mdp_ctl *ctl,
 			te->sync_threshold_start, te->sync_threshold_continue);
 	}
 
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT,
-		te ? te->sync_cfg_height : 0);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_VSYNC_INIT_VAL,
-		te ? te->vsync_init_val : 0);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_RD_PTR_IRQ,
-		te ? te->rd_ptr_irq : 0);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_START_POS,
-		te ? te->start_pos : 0);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_THRESH,
-		te ? ((te->sync_threshold_continue << 16) |
-		 te->sync_threshold_start) : 0);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_TEAR_CHECK_EN,
-		te ? te->tear_check_en : 0);
-
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT, te->sync_cfg_height);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_VSYNC_INIT_VAL, te->vsync_init_val);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_RD_PTR_IRQ, te->rd_ptr_irq);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_START_POS, te->start_pos);
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_THRESH,
+		((te->sync_threshold_continue << 16) |
+		 te->sync_threshold_start));
+	mdss_mdp_pingpong_write(mixer->pingpong_base,
+		MDSS_MDP_REG_PP_TEAR_CHECK_EN, te->tear_check_en);
 	return 0;
 }
 
