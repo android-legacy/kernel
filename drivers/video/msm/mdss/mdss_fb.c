@@ -1762,6 +1762,9 @@ static int mdss_fb_open(struct fb_info *info, int user)
 blank_error:
 	pm_runtime_put(info->dev);
 
+thread_error:
+	pm_runtime_put(info->dev);
+
 pm_error:
 	if (pinfo && !pinfo->ref_cnt) {
 		list_del(&pinfo->list);
@@ -1847,9 +1850,6 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 	if (unknown_pid) {
 		pinfo = mdss_fb_release_file_entry(info, NULL, false);
 		if (pinfo) {
-			pr_debug("found known pid=%d reference for unknown caller pid=%d\n",
-						pinfo->pid, pid);
-			pid = pinfo->pid;
 			mfd->ref_cnt--;
 			pinfo->ref_cnt--;
 			pm_runtime_put(info->dev);
@@ -1865,14 +1865,14 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 	}
 
 	if (release_needed) {
-		pr_debug("current process=%s pid=%d known pid=%d mfd->ref=%d\n",
-			task->comm, current->tgid, pid, mfd->ref_cnt);
+		pr_debug("known process %s pid=%d mfd->ref=%d\n",
+			task->comm, pid, mfd->ref_cnt);
 
 		if (mfd->mdp.release_fnc) {
-			ret = mfd->mdp.release_fnc(mfd, false, pid);
+			ret = mfd->mdp.release_fnc(mfd, false);
 			if (ret)
-				pr_err("error releasing fb%d for current pid=%d known pid=%d\n",
-					mfd->index, current->tgid, pid);
+				pr_err("error releasing fb%d pid=%d\n",
+					mfd->index, pid);
 		}
 	} else if (release_all && mfd->ref_cnt) {
 		pr_err("reference count mismatch with proc list entries\n");
