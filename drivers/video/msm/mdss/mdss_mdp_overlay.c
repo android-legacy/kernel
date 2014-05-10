@@ -1292,12 +1292,6 @@ int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 
-	rc = pm_runtime_get_sync(&mfd->pdev->dev);
-	if (IS_ERR_VALUE(rc)) {
-		pr_err("unable to resume with pm_runtime_get_sync rc=%d\n", rc);
-		goto end;
-	}
-
 	/*
 	 * We need to do hw init before any hw programming.
 	 * Also, hw init involves programming the VBIF registers which
@@ -1311,7 +1305,7 @@ int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 			rc = mdss_iommu_attach(mdss_res);
 			if (rc) {
 				pr_err("mdss iommu attach failed rc=%d\n", rc);
-				goto pm_error;
+				goto end;
 			}
 		}
 		mdss_hw_init(mdss_res);
@@ -1339,8 +1333,6 @@ int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 ctl_error:
 	mdss_mdp_ctl_destroy(ctl);
 	mdp5_data->ctl = NULL;
-pm_error:
-	pm_runtime_put(&mfd->pdev->dev);
 end:
 	return rc;
 }
@@ -3345,25 +3337,24 @@ static int mdss_mdp_overlay_on(struct msm_fb_data_type *mfd)
 		mdp5_data->ctl = ctl;
 	}
 
-	if (mdss_fb_is_power_on(mfd)) {
-		pr_debug("panel was never turned off\n");
-		rc = mdss_mdp_ctl_start(mdp5_data->ctl, false);
-		goto panel_on;
+	rc = pm_runtime_get_sync(&mfd->pdev->dev);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("unable to resume with pm_runtime_get_sync rc=%d\n", rc);
+		goto end;
 	}
 
 	if (!mfd->panel_info->cont_splash_enabled &&
 		(mfd->panel_info->type != DTV_PANEL)) {
 		rc = mdss_mdp_overlay_start(mfd);
 		if (rc)
-			goto end;
-		if (mfd->panel_info->type != WRITEBACK_PANEL) {
-			atomic_inc(&mfd->mdp_sync_pt_data.commit_cnt);
+			goto error_pm;
+		if (mfd->panel_info->type != WRITEBACK_PANEL)
 			rc = mdss_mdp_overlay_kickoff(mfd, NULL);
 		}
 	} else {
 		rc = mdss_mdp_ctl_setup(mdp5_data->ctl);
 		if (rc)
-			goto end;
+			goto error_pm;
 	}
 
 panel_on:
@@ -3373,6 +3364,9 @@ panel_on:
 		goto end;
 	}
 
+error_pm:
+	if (rc)
+		pm_runtime_put_sync(&mfd->pdev->dev);
 end:
 	return rc;
 }
@@ -3400,20 +3394,10 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 	if (!mdss_mdp_ctl_is_power_on(mdp5_data->ctl))
 		return 0;
 
-	/*
-	 * Keep a reference to the runtime pm until the overlay is turned
-	 * off, and then release this last reference at the end. This will
-	 * help in distinguishing between idle power collapse versus suspend
-	 * power collapse
-	 */
-	pm_runtime_get_sync(&mfd->pdev->dev);
-
-	if (mdss_fb_is_power_on_lp(mfd)) {
-		pr_debug("panel not turned off. keeping overlay on\n");
-		goto ctl_stop;
+	if (mdp5_data->mdata->idle_pc) {
+		mdss_mdp_footswitch_ctrl_idle_pc(1, &mfd->pdev->dev);
+		mdss_mdp_ctl_restore(mdp5_data->ctl);
 	}
-
-	mutex_lock(&mdp5_data->ov_lock);
 
 	mdss_mdp_overlay_free_fb_pipe(mfd);
 
