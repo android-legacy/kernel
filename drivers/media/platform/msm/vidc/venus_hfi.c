@@ -1116,6 +1116,9 @@ static int __alloc_ocmem(void *dev, unsigned long size, bool locked)
 			__func__, device, size);
 		return -EINVAL;
 	}
+	if (!device->res->ocmem_size)
+		return rc;
+
 	ocmem_buffer = device->resources.ocmem.buf;
 	if (!ocmem_buffer ||
 		ocmem_buffer->len < size) {
@@ -1170,6 +1173,8 @@ static int venus_hfi_free_ocmem(void *dev)
 			__func__, device);
 		return -EINVAL;
 	}
+	if (!device->res->ocmem_size)
+		return rc;
 
 	if (device->resources.ocmem.buf) {
 		rc = ocmem_free(OCMEM_VIDEO, device->resources.ocmem.buf);
@@ -2948,6 +2953,8 @@ static int venus_hfi_unset_free_ocmem(struct venus_hfi_device *device)
 		dprintk(VIDC_ERR, "Invalid param: %p\n", device);
 		return -EINVAL;
 	}
+	if (!device->res->ocmem_size)
+		return rc;
 
 	init_completion(&release_resources_done);
 	rc = venus_hfi_unset_ocmem(device);
