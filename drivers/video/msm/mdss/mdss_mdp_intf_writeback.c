@@ -568,7 +568,6 @@ static int mdss_mdp_wb_wait4comp(struct mdss_mdp_ctl *ctl, void *arg)
 
 	/* Set flag to release Controller Bandwidth */
 	ctl->perf_release_ctl_bw = true;
-	mdss_bus_bandwidth_ctrl(false);
 
 	ctx->comp_cnt--;
 
