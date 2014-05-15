@@ -468,7 +468,7 @@ static bool mdss_mdp_traffic_shaper_helper(struct mdss_mdp_ctl *ctl,
 
 		if (enable) {
 			if (mdss_mdp_perf_calc_pipe(pipe, &perf, &mixer->roi,
-				false, true))
+				false))
 				continue;
 
 			clk_rate = max(mdss_mdp_get_mdp_clk_rate(ctl->mdata),
@@ -517,7 +517,7 @@ static void mdss_mdp_traffic_shaper(struct mdss_mdp_ctl *ctl,
 {
 	bool traffic_shaper_enabled = 0;
 
-	if (mdss_mdp_ctl_is_power_on(ctl)) {
+	if (ctl->power_on) {
 		traffic_shaper_enabled = mdss_mdp_traffic_shaper_helper
 			(ctl, ctx, enable);
 	}
@@ -563,7 +563,6 @@ static int mdss_mdp_wb_wait4comp(struct mdss_mdp_ctl *ctl, void *arg)
 	if (ctl->traffic_shaper_enabled)
 		mdss_mdp_traffic_shaper(ctl, ctx, false);
 
-	mdss_iommu_ctrl(0);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false); /* clock off */
 
 	/* Set flag to release Controller Bandwidth */

@@ -2645,6 +2645,8 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 	}
 
 	mdss_mdp_parse_vbif_qos(pdev);
+	mdata->traffic_shaper_en = of_property_read_bool(pdev->dev.of_node,
+		 "qcom,mdss-traffic-shaper-enabled");
 
 	return 0;
 }
