@@ -452,6 +452,7 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+	mutex_lock(&ctrl_pdata->mutex);
 	panel_info = &ctrl_pdata->panel_data.panel_info;
 
 	pr_debug("%s+: ctrl=%p ndx=%d power_state=%d\n",
@@ -482,6 +483,7 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
 panel_power_ctrl:
 	ret = mdss_dsi_panel_power_ctrl(pdata, power_state);
 	if (ret) {
+		mutex_unlock(&ctrl_pdata->mutex);
 		pr_err("%s: Panel power off failed\n", __func__);
 	} else {
 		if (panel_info->dynamic_fps
@@ -490,7 +492,12 @@ panel_power_ctrl:
 			panel_info->mipi.frame_rate = panel_info->new_fps;
 	}
 
-end:
+	if (panel_info->dynamic_fps
+	    && (panel_info->dfps_update == DFPS_SUSPEND_RESUME_MODE)
+	    && (panel_info->new_fps != panel_info->mipi.frame_rate))
+		panel_info->mipi.frame_rate = panel_info->new_fps;
+
+	mutex_unlock(&ctrl_pdata->mutex);
 	pr_debug("%s-:\n", __func__);
 
 	return ret;
