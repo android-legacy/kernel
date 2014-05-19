@@ -738,8 +738,8 @@ int mdss_mdp_rotator_play(struct msm_fb_data_type *mfd,
 		goto dst_buf_fail;
 	}
 
-	mdss_mdp_data_free(&rot->src_buf);
-	ret = mdss_mdp_data_get(&rot->src_buf, &req->data, 1, flgs);
+	mdss_mdp_overlay_free_buf(&rot->src_buf);
+	ret = mdss_mdp_overlay_get_buf(mfd, &rot->src_buf, &req->data, 1, flgs);
 	if (ret) {
 		pr_err("src_data pmem error\n");
 		goto dst_buf_fail;

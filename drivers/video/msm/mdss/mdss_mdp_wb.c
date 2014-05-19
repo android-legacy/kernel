@@ -413,8 +413,7 @@ static struct mdss_mdp_wb_data *get_user_node(struct msm_fb_data_type *mfd,
 	struct mdss_mdp_wb *wb = mfd_to_wb(mfd);
 	struct mdss_mdp_wb_data *node;
 	struct mdss_mdp_img_data *buf;
-	u32 flags = 0;
-	int ret;
+	int ret, rc;
 
 	if (!list_empty(&wb->register_queue)) {
 		struct ion_client *iclient = mdss_get_ionclient();
@@ -452,10 +451,18 @@ static struct mdss_mdp_wb_data *get_user_node(struct msm_fb_data_type *mfd,
 
 	node->user_alloc = true;
 	if (wb->is_secure)
-		flags |= MDP_SECURE_OVERLAY_SESSION;
-
-
-	ret = mdss_mdp_data_get(&node->buf_data, data, 1, flags);
+		buf->flags |= MDP_SECURE_OVERLAY_SESSION;
+	rc = mdss_iommu_ctrl(1);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("IOMMU attach failed\n");
+		goto register_fail;
+	}
+	ret = mdss_mdp_get_img(data, buf);
+	rc = mdss_iommu_ctrl(0);
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("IOMMU dettach failed\n");
+		goto register_fail;
+	}
 	if (IS_ERR_VALUE(ret)) {
 		pr_err("error getting buffer info\n");
 		goto register_fail;
@@ -762,6 +769,7 @@ int mdss_mdp_wb_ioctl_handler(struct msm_fb_data_type *mfd, u32 cmd,
 {
 	struct msmfb_data data;
 	int ret = -ENOSYS, hint = 0;
+	int rc;
 
 	switch (cmd) {
 	case MSMFB_WRITEBACK_INIT:
@@ -792,9 +800,17 @@ int mdss_mdp_wb_ioctl_handler(struct msm_fb_data_type *mfd, u32 cmd,
 		}
 		break;
 	case MSMFB_WRITEBACK_TERMINATE:
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+		rc = mdss_iommu_ctrl(1);
+		if (IS_ERR_VALUE(rc)) {
+			pr_err("IOMMU attach failed\n");
+			return rc;
+		}
 		ret = mdss_mdp_wb_terminate(mfd);
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+		rc = mdss_iommu_ctrl(0);
+		if (IS_ERR_VALUE(rc)) {
+			pr_err("IOMMU dettach failed\n");
+			return rc;
+		}
 		break;
 	case MSMFB_WRITEBACK_SET_MIRRORING_HINT:
 		if (!copy_from_user(&hint, arg, sizeof(hint))) {
@@ -924,7 +940,11 @@ int msm_fb_writeback_iommu_ref(struct fb_info *info, int enable)
 			return ret;
 		}
 	} else {
-		mdss_iommu_ctrl(0);
+		ret = mdss_iommu_ctrl(0);
+		if (IS_ERR_VALUE(ret)) {
+			pr_err("IOMMU dettach failed\n");
+			return ret;
+		}
 	}
 
 	return 0;

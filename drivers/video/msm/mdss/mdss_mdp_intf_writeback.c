@@ -563,6 +563,7 @@ static int mdss_mdp_wb_wait4comp(struct mdss_mdp_ctl *ctl, void *arg)
 	if (ctl->traffic_shaper_enabled)
 		mdss_mdp_traffic_shaper(ctl, ctx, false);
 
+	mdss_iommu_ctrl(0);
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false); /* clock off */
 
 	/* Set flag to release Controller Bandwidth */
