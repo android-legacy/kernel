@@ -679,7 +679,10 @@ int mdss_dsi_ulps_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata, int enable)
 		ctrl_pdata->ulps = true;
 	} else if (ctrl_pdata->ulps) {
 		MIPI_OUTP(ctrl_pdata->mmss_misc_io.base + 0x108, 0x0);
-		mdss_dsi_phy_init(pdata);
+		if (ctrl_pdata->ctrl_rev == MDSS_DSI_HW_REV_103)
+			mdss_dsi_20nm_phy_init(pdata);
+		else
+			mdss_dsi_phy_init(pdata);
 
 		__mdss_dsi_ctrl_setup(pdata);
 		mdss_dsi_sw_reset(pdata);
@@ -807,8 +810,14 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	}
 	pdata->panel_info.panel_power_on = 1;
 
+	ctrl_pdata->ctrl_rev = MIPI_INP(ctrl_pdata->ctrl_base);
+
 	mdss_dsi_phy_sw_reset((ctrl_pdata->ctrl_base));
-	mdss_dsi_phy_init(pdata);
+	if (ctrl_pdata->ctrl_rev == MDSS_DSI_HW_REV_103)
+		mdss_dsi_20nm_phy_init(pdata);
+	else
+		mdss_dsi_phy_init(pdata);
+
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_BUS_CLKS, 0);
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
@@ -1891,6 +1900,7 @@ int dsi_panel_device_register(struct device_node *pan_node,
 		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
 		ctrl_pdata->ctrl_state |=
 			(CTRL_STATE_PANEL_INIT | CTRL_STATE_MDP_ACTIVE);
+		ctrl_pdata->ctrl_rev = MIPI_INP(ctrl_pdata->ctrl_base);
 	} else {
 		pinfo->panel_power_state = MDSS_PANEL_POWER_OFF;
 	}
