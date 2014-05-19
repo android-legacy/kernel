@@ -1020,105 +1020,12 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 		pdata = dev_get_platdata(&mfd->pdev->dev);
 		if ((pdata) && (pdata->set_backlight)) {
 			mfd->bl_level = mfd->unset_bl_level;
-			temp = mfd->bl_level;
-			if (mfd->mdp.ad_attenuate_bl) {
-				ret = (*mfd->mdp.ad_attenuate_bl)(temp,
-					&temp, mfd);
-				if (ret)
-					pr_err("Failed to attenuate BL\n");
-			}
-
-			pdata->set_backlight(pdata, temp);
-			mfd->bl_level_scaled = mfd->unset_bl_level;
+			pdata->set_backlight(pdata, mfd->bl_level);
+			mfd->bl_level_old = mfd->unset_bl_level;
 			mfd->bl_updated = 1;
 		}
 	}
 	mutex_unlock(&mfd->bl_lock);
-}
-
-static int mdss_fb_start_disp_thread(struct msm_fb_data_type *mfd)
-{
-	int ret = 0;
-
-	pr_debug("%pS: start display thread fb%d\n",
-		__builtin_return_address(0), mfd->index);
-
-	mdss_fb_get_split(mfd);
-
-	atomic_set(&mfd->commits_pending, 0);
-	mfd->disp_thread = kthread_run(__mdss_fb_display_thread,
-				mfd, "mdss_fb%d", mfd->index);
-
-	if (IS_ERR(mfd->disp_thread)) {
-		pr_err("ERROR: unable to start display thread %d\n",
-				mfd->index);
-		ret = PTR_ERR(mfd->disp_thread);
-		mfd->disp_thread = NULL;
-	}
-
-	return ret;
-}
-
-static void mdss_fb_stop_disp_thread(struct msm_fb_data_type *mfd)
-{
-	pr_debug("%pS: stop display thread fb%d\n",
-		__builtin_return_address(0), mfd->index);
-
-	kthread_stop(mfd->disp_thread);
-	mfd->disp_thread = NULL;
-}
-
-static int mdss_fb_unblank_sub(struct msm_fb_data_type *mfd)
-{
-	int ret = 0;
-	int cur_power_state;
-
-	if (!mfd)
-		return -EINVAL;
-
-	/* Start Display thread */
-	if (mfd->disp_thread == NULL) {
-		ret = mdss_fb_start_disp_thread(mfd);
-		if (ret < 0)
-			return ret;
-	}
-
-	cur_power_state = mfd->panel_power_state;
-
-	if (!mdss_panel_is_power_on_interactive(cur_power_state) &&
-		mfd->mdp.on_fnc) {
-		ret = mfd->mdp.on_fnc(mfd);
-		if (ret == 0) {
-			mfd->panel_power_state = MDSS_PANEL_POWER_ON;
-			mfd->panel_info->panel_dead = false;
-		} else if (mfd->disp_thread) {
-			mdss_fb_stop_disp_thread(mfd);
-			goto error;
-		}
-		mutex_lock(&mfd->update.lock);
-		mfd->update.type = NOTIFY_TYPE_UPDATE;
-		mfd->update.is_suspend = 0;
-		mutex_unlock(&mfd->update.lock);
-
-		/* Start the work thread to signal idle time */
-		if (mfd->idle_time)
-			schedule_delayed_work(&mfd->idle_notify_work,
-				msecs_to_jiffies(mfd->idle_time));
-	}
-
-	/* Reset the backlight only if the panel was off */
-	if (mdss_panel_is_power_off(cur_power_state)) {
-		mutex_lock(&mfd->bl_lock);
-		if (!mfd->bl_updated) {
-			mfd->bl_updated = 1;
-			mdss_fb_set_backlight(mfd,
-				mfd->bl_level_prev_scaled);
-		}
-		mutex_unlock(&mfd->bl_lock);
-	}
-
-error:
-	return ret;
 }
 
 static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
@@ -1209,15 +1116,10 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 			complete(&mfd->no_update.comp);
 
 			mfd->op_enable = false;
+			curr_pwr_state = mfd->panel_power_on;
+			mfd->panel_power_on = false;
 			mutex_lock(&mfd->bl_lock);
-			if (mdss_panel_is_power_off(req_power_state)) {
-				/* Stop Display thread */
-				if (mfd->disp_thread)
-					mdss_fb_stop_disp_thread(mfd);
-				mdss_fb_set_backlight(mfd, 0);
-				mfd->bl_updated = 0;
-			}
-			mfd->panel_power_state = req_power_state;
+			mfd->bl_updated = 0;
 			mutex_unlock(&mfd->bl_lock);
 
 			ret = mfd->mdp.off_fnc(mfd);
