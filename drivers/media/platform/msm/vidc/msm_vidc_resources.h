@@ -122,16 +122,6 @@ struct msm_vidc_platform_resources {
 	bool sys_idle_indicator;
 };
 
-struct msm_vidc_idle_time {
-	bool core_in_idle;
-	u32 fb_err_level;
-	u32 prev_fb_err_level;
-	u32 idx;
-	u32 array_size;
-	u64 start_idle_time;
-	u64 avg_idle_time;
-	u64 core_idle_times[IDLE_TIME_WINDOW_SIZE];
-};
 static inline int is_iommu_present(struct msm_vidc_platform_resources *res)
 {
 	if (res)
