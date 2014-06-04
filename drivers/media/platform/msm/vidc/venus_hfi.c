@@ -1296,6 +1296,24 @@ static unsigned long venus_hfi_get_clock_rate(struct clock_info *clock,
 	return freq;
 }
 
+static int venus_hfi_suspend(void *dev)
+{
+	int rc = 0;
+	struct venus_hfi_device *device = (struct venus_hfi_device *) dev;
+
+	if (!device) {
+		dprintk(VIDC_ERR, "%s invalid device\n", __func__);
+		return -EINVAL;
+	}
+	dprintk(VIDC_INFO, "%s\n", __func__);
+
+	if (device->power_enabled) {
+		rc = flush_delayed_work(&venus_hfi_pm_work);
+		dprintk(VIDC_INFO, "%s flush delayed work %d\n", __func__, rc);
+	}
+	return 0;
+}
+
 static inline int venus_hfi_clk_enable(struct venus_hfi_device *device)
 {
 	int rc = 0;
