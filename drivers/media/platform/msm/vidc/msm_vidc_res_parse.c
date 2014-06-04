@@ -19,7 +19,7 @@
 
 enum clock_properties {
 	CLOCK_PROP_HAS_SCALING = 1 << 0,
-	CLOCK_PROP_HAS_SW_POWER_COLLAPSE = 1 << 1,
+	CLOCK_PROP_HAS_GATING = 1 << 1,
 };
 
 static size_t get_u32_array_num_elements(struct platform_device *pdev,

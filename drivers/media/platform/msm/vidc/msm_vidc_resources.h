@@ -118,6 +118,7 @@ struct msm_vidc_platform_resources {
 	struct bus_set bus_set;
 	bool dynamic_bw_update;
 	bool use_non_secure_pil;
+	bool sw_power_collapsible;
 };
 
 struct msm_vidc_idle_time {
