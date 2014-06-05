@@ -3458,14 +3458,13 @@ static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd)
 		mdss_mdp_overlay_kickoff(mfd, NULL);
 	}
 
-	/*
-	 * If retire fences are still active wait for a vsync time
-	 * for retire fence to be updated.
-	 * As a last resort signal the timeline if vsync doesn't arrive.
-	 */
-	if (mdp5_data->retire_cnt) {
-		u32 fps = mdss_panel_get_framerate(mfd->panel_info);
-		u32 vsync_time = 1000 / (fps ? : DEFAULT_FRAME_RATE);
+	rc = mdss_mdp_ctl_stop(mdp5_data->ctl);
+	if (rc == 0) {
+		mutex_lock(&mdp5_data->list_lock);
+		__mdss_mdp_overlay_free_list_purge(mfd);
+		mutex_unlock(&mdp5_data->list_lock);
+		mdss_mdp_ctl_notifier_unregister(mdp5_data->ctl,
+				&mfd->mdp_sync_pt_data.notifier);
 
 		msleep(vsync_time);
 
