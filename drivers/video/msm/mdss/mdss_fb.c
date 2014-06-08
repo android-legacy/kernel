@@ -1216,7 +1216,6 @@ void mdss_fb_free_fb_ion_memory(struct msm_fb_data_type *mfd)
 
 	mfd->fbi->screen_base = NULL;
 	mfd->fbi->fix.smem_start = 0;
-	mfd->fbi->fix.smem_len = 0;
 
 	ion_unmap_kernel(mfd->fb_ion_client, mfd->fb_ion_handle);
 
@@ -1734,9 +1733,9 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	var->pixclock = panel_info->clk_rate / 1000;
 
 	/*
-	 * Populate smem length with fb size. smem_len gets
-	 * over written if physically contiguous  memory is
-	 * allocated at boot time
+	 * Populate smem length here for uspace to get the
+	 * Franebuffer size when FBIO_FSCREENINFO ioctl is
+	 * called.
 	 */
 	fix->smem_len = fix->line_length * var->yres_virtual;
 
