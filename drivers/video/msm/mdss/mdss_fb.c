@@ -989,6 +989,12 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
 	if ((pdata) && (pdata->set_backlight)) {
+		if (mfd->mdp.ad_attenuate_bl && is_bl_changed) {
+			ret = (*mfd->mdp.ad_attenuate_bl)(bkl_lvl, &temp, mfd);
+			if (ret)
+				pr_err("Failed to attenuate BL\n");
+		}
+
 		mfd->bl_level_prev_scaled = mfd->bl_level_scaled;
 		if (!IS_CALIB_MODE_BL(mfd))
 			mdss_fb_scale_bl(mfd, &temp);
@@ -1026,19 +1032,27 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 	int ret = 0;
 	u32 temp;
 
-	if (mfd->unset_bl_level) {
-		mutex_lock(&mfd->bl_lock);
-		if (!mfd->bl_updated) {
-			pdata = dev_get_platdata(&mfd->pdev->dev);
-			if ((pdata) && (pdata->set_backlight)) {
-				mfd->bl_level = mfd->unset_bl_level;
-				pdata->set_backlight(pdata, mfd->bl_level);
-				mfd->bl_level_scaled = mfd->unset_bl_level;
-				mfd->bl_updated = 1;
+	if (!mfd->unset_bl_level)
+		return;
+	mutex_lock(&mfd->bl_lock);
+	if (!mfd->bl_updated) {
+		pdata = dev_get_platdata(&mfd->pdev->dev);
+		if ((pdata) && (pdata->set_backlight)) {
+			mfd->bl_level = mfd->unset_bl_level;
+			temp = mfd->bl_level;
+			if (mfd->mdp.ad_attenuate_bl) {
+				ret = (*mfd->mdp.ad_attenuate_bl)(temp,
+						&temp, mfd);
+				if (ret)
+					pr_err("Failed to attenuate BL\n");
 			}
+
+			pdata->set_backlight(pdata, temp);
+			mfd->bl_level_scaled = mfd->unset_bl_level;
+			mfd->bl_updated = 1;
 		}
-		mutex_unlock(&mfd->bl_lock);
 	}
+	mutex_unlock(&mfd->bl_lock);
 }
 
 static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
