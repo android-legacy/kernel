@@ -1569,7 +1569,6 @@ static inline int venus_hfi_clk_gating_off(struct venus_hfi_device *device)
 		dprintk(VIDC_DBG, "Clocks are already enabled\n");
 		goto already_enabled;
 	}
-	cancel_delayed_work(&venus_hfi_pm_work);
 	if (!device->power_enabled) {
 		/*This will enable clocks as well*/
 		rc = venus_hfi_power_on(device);
@@ -1672,6 +1671,19 @@ static int venus_hfi_iface_cmdq_write_nolock(struct venus_hfi_device *device,
 			venus_hfi_write_register(
 				device, VIDC_CPU_IC_SOFTINT,
 				1 << VIDC_CPU_IC_SOFTINT_H2A_SHFT);
+
+		if (device->res->sw_power_collapsible) {
+			dprintk(VIDC_DBG,
+				"Cancel and queue delayed work again\n");
+			cancel_delayed_work(&venus_hfi_pm_work);
+			if (!queue_delayed_work(device->venus_pm_workq,
+				&venus_hfi_pm_work,
+				msecs_to_jiffies(
+				msm_vidc_pwr_collapse_delay))) {
+				dprintk(VIDC_DBG,
+				"PM work already scheduled\n");
+			}
+		}
 		result = 0;
 	} else {
 		dprintk(VIDC_ERR, "venus_hfi_iface_cmdq_write:queue_full\n");
@@ -3020,10 +3032,8 @@ static void venus_hfi_pm_hndlr(struct work_struct *work)
 	struct venus_hfi_device *device = list_first_entry(
 			&hal_ctxt.dev_head, struct venus_hfi_device, list);
 	mutex_lock(&device->clk_pwr_lock);
-	if (device->clk_state == ENABLED_PREPARED || !device->power_enabled) {
-		dprintk(VIDC_DBG,
-				"Clocks status: %d, Power status: %d, ignore power off\n",
-				device->clk_state, device->power_enabled);
+	if (!device->power_enabled) {
+		dprintk(VIDC_DBG, "Power already disabled\n");
 		goto clks_enabled;
 	}
 	mutex_unlock(&device->clk_pwr_lock);
@@ -3044,111 +3054,11 @@ static void venus_hfi_pm_hndlr(struct work_struct *work)
 	}
 
 	mutex_lock(&device->clk_pwr_lock);
-	if (device->clk_state == ENABLED_PREPARED) {
-		dprintk(VIDC_ERR,
-				"Wait interrupted or timeout for PC_PREP_DONE: %d\n",
-				rc);
-		rc = -EIO;
-		goto err_pc_prep;
-	}
-	rc = 0;
-err_pc_prep:
-	return rc;
-}
-
-static void venus_hfi_pm_hndlr(struct work_struct *work)
-{
-	int rc = 0;
-	u32 ctrl_status = 0;
-	struct venus_hfi_device *device = list_first_entry(
-			&hal_ctxt.dev_head, struct venus_hfi_device, list);
-	if (!device) {
-		dprintk(VIDC_ERR, "%s: NULL device\n", __func__);
-		return;
-	}
-	if (!device->power_enabled) {
-		dprintk(VIDC_DBG, "%s: Power already disabled\n",
-				__func__);
-		return;
-	}
-	dprintk(VIDC_DBG, "Prepare for power collapse\n");
-
-	mutex_lock(&device->resource_lock);
-	rc = __unset_free_ocmem(device);
-	mutex_unlock(&device->resource_lock);
-	if (rc) {
-		dprintk(VIDC_ERR,
-			"Failed to unset and free OCMEM for PC, rc : %d\n", rc);
-		return;
-	}
-
-	rc = venus_hfi_prepare_pc(device);
-	if (rc) {
-		dprintk(VIDC_ERR, "Failed to prepare for PC, rc : %d\n", rc);
-		rc = __alloc_set_ocmem(device, true);
-		if (rc)
-			dprintk(VIDC_WARN,
-				"Failed to re-allocate OCMEM. Performance will be impacted\n");
-		return;
-	}
-
-	mutex_lock(&device->write_lock);
-
-	if (device->last_packet_type != HFI_CMD_SYS_PC_PREP) {
-		dprintk(VIDC_DBG,
-			"Last command (0x%x) is not PC_PREP cmd\n",
-			device->last_packet_type);
-		goto skip_power_off;
-	}
-
-	if (venus_hfi_get_q_size(device, VIDC_IFACEQ_MSGQ_IDX) ||
-		venus_hfi_get_q_size(device, VIDC_IFACEQ_CMDQ_IDX)) {
-		dprintk(VIDC_DBG, "Cmd/msg queues are not empty\n");
-		goto skip_power_off;
-	}
-
-	ctrl_status = venus_hfi_read_register(device, VIDC_CPU_CS_SCIACMDARG0);
-	if (!(ctrl_status & VIDC_CPU_CS_SCIACMDARG0_HFI_CTRL_PC_READY)) {
-		dprintk(VIDC_DBG,
-			"Venus is not ready for power collapse (0x%x)\n",
-			ctrl_status);
-		goto skip_power_off;
-	}
-
 	rc = venus_hfi_power_off(device);
-	if (rc) {
-		dprintk(VIDC_ERR, "Failed venus power off\n");
-		goto err_power_off;
-	}
-
-	/* Cancel pending delayed works if any */
-	cancel_delayed_work(&venus_hfi_pm_work);
-
-	mutex_unlock(&device->write_lock);
-	return;
-
-err_power_off:
-skip_power_off:
-
-	/* Reset PC_READY bit as power_off is skipped, if set by Venus */
-	ctrl_status = venus_hfi_read_register(device, VIDC_CPU_CS_SCIACMDARG0);
-	if (ctrl_status & VIDC_CPU_CS_SCIACMDARG0_HFI_CTRL_PC_READY) {
-		ctrl_status &= ~(VIDC_CPU_CS_SCIACMDARG0_HFI_CTRL_PC_READY);
-		venus_hfi_write_register(device, VIDC_CPU_CS_SCIACMDARG0,
-			ctrl_status, 0);
-	}
-
-	/* Cancel pending delayed works if any */
-	cancel_delayed_work(&venus_hfi_pm_work);
-	dprintk(VIDC_WARN, "Power off skipped (0x%x, 0x%x)\n",
-		device->last_packet_type, ctrl_status);
-
-	mutex_unlock(&device->write_lock);
-	rc = __alloc_set_ocmem(device, true);
 	if (rc)
-		dprintk(VIDC_WARN,
-			"Failed to re-allocate OCMEM. Performance will be impacted\n");
-	return;
+		dprintk(VIDC_ERR, "Failed venus power off\n");
+clks_enabled:
+	mutex_unlock(&device->clk_pwr_lock);
 }
 
 static void venus_hfi_process_msg_event_notify(
@@ -3239,21 +3149,6 @@ static void venus_hfi_response_handler(struct venus_hfi_device *device)
 			}
 		}
 		switch (rc) {
-		case HFI_MSG_SYS_IDLE:
-			/* Queue worker thread to enable power collapse */
-			if (device->res->sw_power_collapsible) {
-				if (!queue_delayed_work(device->venus_pm_workq,
-					&venus_hfi_pm_work, msecs_to_jiffies(
-						msm_vidc_pwr_collapse_delay))) {
-					dprintk(VIDC_DBG,
-						"PM work already scheduled\n");
-				}
-			}
-
-			dprintk(VIDC_DBG,
-					"Received HFI_MSG_SYS_IDLE\n");
-			rc = venus_hfi_try_clk_gating(device);
-			break;
 		case HFI_MSG_SYS_PC_PREP_DONE:
 			dprintk(VIDC_DBG,
 					"Received HFI_MSG_SYS_PC_PREP_DONE\n");
@@ -3275,10 +3170,6 @@ static void venus_hfi_core_work_handler(struct work_struct *work)
 	if (!device->callback) {
 		dprintk(VIDC_ERR, "No interrupt callback function: %p\n",
 				device);
-		return;
-	}
-	if (venus_hfi_power_enable(device)) {
-		dprintk(VIDC_ERR, "%s: Power enable failed\n", __func__);
 		return;
 	}
 	if (device->res->sw_power_collapsible) {
