@@ -43,9 +43,6 @@
 #define IS_RIGHT_MIXER_OV(flags, dst_x, left_lm_w)	\
 	((flags & MDSS_MDP_RIGHT_MIXER) || (dst_x >= left_lm_w))
 
-#define PP_CLK_CFG_OFF 0
-#define PP_CLK_CFG_ON 1
-
 #define MEM_PROTECT_SD_CTRL 0xF
 
 #define OVERLAY_MAX 10
@@ -2765,8 +2762,8 @@ static int mdss_mdp_histo_ioctl(struct msm_fb_data_type *mfd, u32 cmd,
 	int ret = -ENOSYS;
 	struct mdp_histogram_data hist;
 	struct mdp_histogram_start_req hist_req;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	u32 block;
-	u32 pp_bus_handle;
 	static int req = -1;
 
 	if (mfd->panel_info->partial_update_enabled) {
@@ -2779,11 +2776,14 @@ static int mdss_mdp_histo_ioctl(struct msm_fb_data_type *mfd, u32 cmd,
 		if (mdss_fb_is_power_off(mfd))
 			return -EPERM;
 
-		pp_bus_handle = mdss_mdp_get_mdata()->pp_bus_hdl;
-		req = msm_bus_scale_client_update_request(pp_bus_handle,
-				PP_CLK_CFG_ON);
-		if (req)
-			pr_err("Updated pp_bus_scale failed, ret = %d", req);
+		if (mdata->reg_bus_hdl) {
+			req = msm_bus_scale_client_update_request(
+					mdata->reg_bus_hdl,
+					REG_CLK_CFG_LOW);
+			if (req)
+				pr_err("Updated pp_bus_scale failed, ret = %d",
+						req);
+		}
 
 		ret = copy_from_user(&hist_req, argp, sizeof(hist_req));
 		if (ret)
@@ -2801,10 +2801,10 @@ static int mdss_mdp_histo_ioctl(struct msm_fb_data_type *mfd, u32 cmd,
 		if (ret)
 			return ret;
 
-		if (!req) {
-			pp_bus_handle = mdss_mdp_get_mdata()->pp_bus_hdl;
-			req = msm_bus_scale_client_update_request(pp_bus_handle,
-				 PP_CLK_CFG_OFF);
+		if (mdata->reg_bus_hdl && !req) {
+			req = msm_bus_scale_client_update_request(
+				mdata->reg_bus_hdl,
+				REG_CLK_CFG_OFF);
 			if (req)
 				pr_err("Updated pp_bus_scale failed, ret = %d",
 					req);

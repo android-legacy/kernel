@@ -115,17 +115,10 @@ enum mdp_wfd_blk_type {
 	MDSS_MDP_WFD_DEDICATED,
 };
 
-/**
- * enum mdp_commit_stage_type - Indicate different commit stages
- *
- * @MDP_COMMIT_STATE_WAIT_FOR_PINGPONG:	At the stage of
- *			being ready to wait for pingpong buffer.
- * @MDP_COMMIT_STATE_PINGPONG_DONE:	At the stage that pingpong buffer
- *			is ready.
- */
-enum mdp_commit_stage_type {
-	MDP_COMMIT_STAGE_SETUP_DONE,
-	MDP_COMMIT_STAGE_READY_FOR_KICKOFF,
+enum mdss_mdp_reg_bus_cfg {
+	REG_CLK_CFG_OFF,
+	REG_CLK_CFG_LOW,
+	REG_CLK_CFG_HIGH,
 };
 
 struct mdss_mdp_ctl;
