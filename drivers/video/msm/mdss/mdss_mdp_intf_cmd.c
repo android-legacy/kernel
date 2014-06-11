@@ -730,11 +730,9 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_ON, NULL);
 		WARN(rc, "intf %d panel on error (%d)\n", ctl->intf_num, rc);
 
-		ctx->panel_power_state = MDSS_PANEL_POWER_ON;
-		if (sctx)
-			sctx->panel_power_state = MDSS_PANEL_POWER_ON;
-	} else {
-		pr_debug("%s: panel already on\n", __func__);
+		mdss_mdp_ctl_intf_event(ctl,
+				MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
+				(void *)&ctx->recovery);
 	}
 
 	MDSS_XLOG(ctl->num, ctl->roi.x, ctl->roi.y, ctl->roi.w,
@@ -758,8 +756,8 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	/*
 	 * tx dcs command if had any
 	 */
-	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_CMDLIST_KOFF,
-						(void *)&ctx->recovery);
+	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_CMDLIST_KOFF, NULL);
+
 	mdss_mdp_cmd_set_stream_size(ctl);
 
 	mdss_mdp_cmd_set_sync_ctx(ctl, sctl);
@@ -850,6 +848,10 @@ static void mdss_mdp_cmd_stop_sub(struct mdss_mdp_ctl *ctl,
 
 	if (cancel_delayed_work_sync(&ctx->pc_work))
 		pr_debug("deleted pending power collapse work\n");
+
+	mdss_mdp_ctl_intf_event(ctl,
+			MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
+			NULL);
 
 	ctx->panel_on = 0;
 	mdss_mdp_cmd_clk_off(ctx);
