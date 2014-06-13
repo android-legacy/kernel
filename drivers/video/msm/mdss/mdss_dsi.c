@@ -21,6 +21,7 @@
 #include <linux/gpio.h>
 #include <linux/err.h>
 #include <linux/regulator/consumer.h>
+#include <linux/leds-qpnp-wled.h>
 
 #include "mdss.h"
 #include "mdss_panel.h"
@@ -99,8 +100,16 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 				goto error_enable;
 			}
 		}
-	}
-	i--;
+		if (ctrl_pdata->panel_bias_vreg) {
+			pr_debug("%s: Enable panel bias vreg. ndx = %d\n",
+			       __func__, ctrl_pdata->ndx);
+			if (qpnp_ibb_enable(true))
+				pr_err("Unable to configure bias vreg\n");
+			/*
+			 * Add delay recommended by panel specs
+			 */
+			udelay(2000);
+		}
 
 		if (!pdata->panel_info.mipi.lp11_init) {
 			if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
@@ -123,6 +132,16 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 			pr_debug("reset disable: pinctrl not enabled\n");
 
+		if (ctrl_pdata->panel_bias_vreg) {
+			pr_debug("%s: Disabling panel bias vreg. ndx = %d\n",
+			       __func__, ctrl_pdata->ndx);
+			if (qpnp_ibb_enable(false))
+				pr_err("Unable to disable bias vreg\n");
+			/*
+			 * Add delay recommended by panel specs
+			 */
+			udelay(2000);
+		}
 		for (i = DSI_MAX_PM - 1; i >= 0; i--) {
 			/*
 			 * Core power module will be disabled when the
@@ -1554,6 +1573,14 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 			goto error_vreg;
 		}
 	}
+
+	/*
+	 * Currently, the Bias vreg is controlled by wled driver.
+	 * Once we have support from pmic driver, implement the
+	 * bias vreg control using the existing vreg apis.
+	 */
+	ctrl_pdata->panel_bias_vreg = of_property_read_bool(
+			pdev->dev.of_node, "qcom,dsi-panel-bias-vreg");
 
 	/* DSI panels can be different between controllers */
 	rc = mdss_dsi_get_panel_cfg(panel_cfg);
