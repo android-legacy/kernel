@@ -655,16 +655,23 @@ static int mdss_dsi_link_clk_set_rate(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		return -EINVAL;
 	}
 
-	if (!ctrl_pdata->panel_data.panel_info.cont_splash_enabled) {
-		pr_debug("%s: Set clk rates: pclk=%d, byteclk=%d escclk=%d\n",
-			__func__, ctrl_pdata->pclk_rate,
-			ctrl_pdata->byte_clk_rate, esc_clk_rate);
-		rc = clk_set_rate(ctrl_pdata->esc_clk, esc_clk_rate);
-		if (rc) {
-			pr_err("%s: dsi_esc_clk - clk_set_rate failed\n",
-				__func__);
-			goto error;
-		}
+	/*
+	 * In sync_wait_broadcast mode, we need to enable clocks
+	 * for the other controller as well when enabling clocks
+	 * for the trigger controller
+	 */
+	if (mdss_dsi_sync_wait_trigger(ctrl)) {
+		mctrl = mdss_dsi_get_other_ctrl(ctrl);
+		if (!mctrl)
+			pr_warn("%s: Unable to get left control\n", __func__);
+	}
+
+	pr_debug("%s++: ndx=%d clk_type=%d bus_clk_cnt=%d link_clk_cnt=%d\n",
+		__func__, ctrl->ndx, clk_type, ctrl->bus_clk_cnt,
+		ctrl->link_clk_cnt);
+	pr_debug("%s++: mctrl=%s m_bus_clk_cnt=%d m_link_clk_cnt=%d, enable=%d\n",
+		__func__, mctrl ? "yes" : "no", mctrl ? mctrl->bus_clk_cnt : -1,
+		mctrl ? mctrl->link_clk_cnt : -1, enable);
 
 		rc =  clk_set_rate(ctrl_pdata->byte_clk,
 			ctrl_pdata->byte_clk_rate);
