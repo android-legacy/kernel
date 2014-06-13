@@ -2155,7 +2155,6 @@ static int venus_hfi_sys_set_power_control(struct venus_hfi_device *device,
 		}
 	}
 
-	supported = supported && msm_fw_low_power_mode;
 	if (!supported)
 		return 0;
 
