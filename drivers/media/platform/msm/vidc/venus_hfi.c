@@ -1381,7 +1381,7 @@ err_clk_gating_off:
 static inline int venus_hfi_power_off(struct venus_hfi_device *device)
 {
 	int rc = 0;
-
+	struct regulator *r = NULL;
 	if (!device) {
 		dprintk(VIDC_ERR, "Invalid params: %p\n", device);
 		return -EINVAL;
@@ -1406,14 +1406,13 @@ static inline int venus_hfi_power_off(struct venus_hfi_device *device)
 	venus_hfi_disable_unprepare_clks(device);
 	venus_hfi_iommu_detach(device);
 
-	/*
-	* For some regulators, driver might have transfered the control to HW.
-	* So before touching any clocks, driver should get the regulator
-	* control back. Acquire regulators also makes sure that the regulators
-	* are turned ON. So driver can touch the clocks safely.
-	*/
+	r = venus_hfi_get_regulator(device, "venus");
+	if (!r) {
+		dprintk(VIDC_ERR, "%s - failed to get regulator\n", __func__);
+		return -EINVAL;
+	}
 
-	rc = venus_hfi_acquire_regulators(device);
+	rc = regulator_disable(r);
 	if (rc) {
 		dprintk(VIDC_WARN, "Failed to disable GDSC, %d\n", rc);
 		return rc;
@@ -1430,7 +1429,7 @@ already_disabled:
 static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 {
 	int rc = 0;
-
+	struct regulator *r = NULL;
 	if (!device) {
 		dprintk(VIDC_ERR, "Invalid params: %p\n", device);
 		return -EINVAL;
@@ -1444,8 +1443,15 @@ static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 		dprintk(VIDC_ERR, "Failed to scale buses\n");
 		goto err_vote_buses;
 	}
-	/* At this point driver has the control for all regulators */
-	rc = venus_hfi_enable_regulators(device);
+
+	r = venus_hfi_get_regulator(device, "venus");
+	if (!r) {
+		dprintk(VIDC_ERR, "%s - failed to get regulator\n", __func__);
+		rc = -EINVAL;
+		goto err_enable_gdsc;
+	}
+
+	rc = regulator_enable(r);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to enable GDSC in %s Err code = %d\n",
 			__func__, rc);
