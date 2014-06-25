@@ -1342,7 +1342,7 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 	}
 
 	req_size = vma->vm_end - vma->vm_start;
-	fb_size = mfd->fbi->fix.line_length * mfd->fbi->var.yres * MDSS_FB_NUM;
+	fb_size = mfd->fbi->fix.smem_len;
 	if (req_size > fb_size) {
 		pr_warn("requested map is greater than framebuffer");
 		return -EOVERFLOW;
@@ -1360,12 +1360,10 @@ static int mdss_fb_fbmem_ion_mmap(struct fb_info *info,
 	if (IS_ERR(table)) {
 		pr_err("Unable to get sg_table from ion:%ld\n", PTR_ERR(table));
 		mfd->fbi->screen_base = NULL;
-		mfd->fbi->fix.smem_len = 0;
 		return PTR_ERR(table);
 	} else if (!table) {
 		pr_err("sg_list is NULL\n");
 		mfd->fbi->screen_base = NULL;
-		mfd->fbi->fix.smem_len = 0;
 		return -EINVAL;
 	}
 
@@ -1516,7 +1514,6 @@ static int mdss_fb_alloc_fbmem_iommu(struct msm_fb_data_type *mfd, int dom)
 		pr_debug("fbmem is not reserved for %s\n", pdev->name);
 		mfd->fbi->screen_base = NULL;
 		mfd->fbi->fix.smem_start = 0;
-		mfd->fbi->fix.smem_len = 0;
 		return 0;
 	} else {
 		const u32 *addr;
