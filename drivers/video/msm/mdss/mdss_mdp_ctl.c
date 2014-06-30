@@ -3033,19 +3033,8 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 		mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_READY);
 	ATRACE_END("frame_ready");
 
-	ATRACE_BEGIN("wait_pingpong");
-	if (ctl->wait_pingpong)
-		ctl->wait_pingpong(ctl, NULL);
-	ATRACE_END("wait_pingpong");
-
 	ctl->roi_bkup.w = ctl->roi.w;
 	ctl->roi_bkup.h = ctl->roi.h;
-
-	if (sctl && sctl->wait_pingpong) {
-		ATRACE_BEGIN("wait_pingpong sctl");
-		sctl->wait_pingpong(sctl, NULL);
-		ATRACE_END("wait_pingpong sctl");
-	}
 
 	/*
 	 * With partial frame update, enable split display bit only
@@ -3088,6 +3077,27 @@ int mdss_mdp_display_commit(struct mdss_mdp_ctl *ctl, void *arg,
 		ctl->panel_data->panel_info.roi = ctl->roi;
 		if (sctl && sctl->panel_data)
 			sctl->panel_data->panel_info.roi = sctl->roi;
+	}
+
+	if (ctl->wait_pingpong) {
+		if (commit_cb)
+			commit_cb->commit_cb_fnc(
+				MDP_COMMIT_STAGE_WAIT_FOR_PINGPONG,
+				commit_cb->data);
+
+		ATRACE_BEGIN("wait_pingpong");
+		ctl->wait_pingpong(ctl, NULL);
+		ATRACE_END("wait_pingpong");
+
+		if (sctl && sctl->wait_pingpong) {
+			ATRACE_BEGIN("wait_pingpong sctl");
+			sctl->wait_pingpong(sctl, NULL);
+			ATRACE_END("wait_pingpong sctl");
+		}
+
+		if (commit_cb)
+			commit_cb->commit_cb_fnc(MDP_COMMIT_STAGE_PINGPONG_DONE,
+				commit_cb->data);
 	}
 
 	if (sctl && !ctl->valid_roi && sctl->valid_roi) {
