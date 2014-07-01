@@ -20,6 +20,7 @@
 #include <linux/types.h>
 #include <linux/completion.h>
 #include <linux/wait.h>
+#include <linux/workqueue.h>
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
 #include <soc/qcom/ocmem.h>
@@ -277,6 +278,7 @@ struct msm_vidc_core {
 	u32 enc_codec_supported;
 	u32 dec_codec_supported;
 	struct msm_vidc_idle_stats idle_stats;
+	struct delayed_work fw_unload_work;
 };
 
 struct msm_vidc_inst {
