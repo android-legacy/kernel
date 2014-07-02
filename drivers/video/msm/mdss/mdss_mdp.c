@@ -48,6 +48,7 @@
 #include <soc/qcom/scm.h>
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
+#include <soc/qcom/scm.h>
 
 #include "mdss.h"
 #include "mdss_fb.h"
@@ -1513,7 +1514,6 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 	mdss_res = mdata;
 	mutex_init(&mdata->reg_lock);
 	atomic_set(&mdata->sd_client_count, 0);
-	atomic_set(&mdata->active_intf_cnt, 0);
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mdp_phys");
 	if (!res) {
@@ -3006,6 +3006,26 @@ int mdss_mdp_footswitch_ctrl_idle_pc(int on, struct device *dev)
 	}
 
 	return 0;
+}
+
+int mdss_mdp_secure_display_ctrl(unsigned int enable)
+{
+	struct sd_ctrl_req {
+		unsigned int enable;
+	} __attribute__ ((__packed__)) request;
+	unsigned int resp = -1;
+	int ret = 0;
+
+	request.enable = enable;
+
+	ret = scm_call(SCM_SVC_MP, MEM_PROTECT_SD_CTRL,
+		&request, sizeof(request), &resp, sizeof(resp));
+	pr_debug("scm_call MEM_PROTECT_SD_CTRL(%u): ret=%d, resp=%x",
+				enable, ret, resp);
+	if (ret)
+		return ret;
+
+	return resp;
 }
 
 static inline int mdss_mdp_suspend_sub(struct mdss_data_type *mdata)

@@ -135,6 +135,7 @@ struct mdss_data_type {
 	bool has_panic_ctrl;
 	u32 wfd_mode;
 	u32 has_no_lut_read;
+	atomic_t sd_client_count;
 	u8 has_wb_ad;
 	u8 has_non_scalar_rgb;
 	bool has_src_split;
