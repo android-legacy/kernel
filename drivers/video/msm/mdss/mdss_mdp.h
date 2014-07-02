@@ -638,6 +638,18 @@ static inline void mdss_update_sd_client(struct mdss_data_type *mdata,
 		atomic_add_unless(&mdss_res->sd_client_count, -1, 0);
 }
 
+static inline int mdss_mdp_get_wb_ctl_support(struct mdss_data_type *mdata,
+							bool rotator_session)
+{
+	/*
+	 * Initial control paths are used for primary and external
+	 * interfaces and remaining control paths are used for WB
+	 * interfaces.
+	 */
+	return rotator_session ? (mdata->nctl - mdata->nmixers_wb) :
+				(mdata->nctl - mdata->nwb);
+}
+
 irqreturn_t mdss_mdp_isr(int irq, void *ptr);
 void mdss_mdp_irq_clear(struct mdss_data_type *mdata,
 		u32 intr_type, u32 intf_num);
