@@ -153,19 +153,25 @@ static int mdss_mdp_cmd_tearcheck_cfg(struct mdss_mdp_ctl *ctl,
 	mdss_mdp_pingpong_write(mixer->pingpong_base,
 		MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
 	mdss_mdp_pingpong_write(mixer->pingpong_base,
-		MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT, te->sync_cfg_height);
+		MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT,
+		te ? te->sync_cfg_height : 0);
 	mdss_mdp_pingpong_write(mixer->pingpong_base,
-		MDSS_MDP_REG_PP_VSYNC_INIT_VAL, te->vsync_init_val);
+		MDSS_MDP_REG_PP_VSYNC_INIT_VAL,
+		te ? te->vsync_init_val : 0);
 	mdss_mdp_pingpong_write(mixer->pingpong_base,
-		MDSS_MDP_REG_PP_RD_PTR_IRQ, te->rd_ptr_irq);
+		MDSS_MDP_REG_PP_RD_PTR_IRQ,
+		te ? te->rd_ptr_irq : 0);
 	mdss_mdp_pingpong_write(mixer->pingpong_base,
-		MDSS_MDP_REG_PP_START_POS, te->start_pos);
+		MDSS_MDP_REG_PP_START_POS,
+		te ? te->start_pos : 0);
 	mdss_mdp_pingpong_write(mixer->pingpong_base,
 		MDSS_MDP_REG_PP_SYNC_THRESH,
-		((te->sync_threshold_continue << 16) |
-		 te->sync_threshold_start));
+		te ? ((te->sync_threshold_continue << 16) |
+		 te->sync_threshold_start) : 0);
 	mdss_mdp_pingpong_write(mixer->pingpong_base,
-		MDSS_MDP_REG_PP_TEAR_CHECK_EN, te->tear_check_en);
+		MDSS_MDP_REG_PP_TEAR_CHECK_EN,
+		te ? te->tear_check_en : 0);
+
 	return 0;
 }
 
@@ -218,7 +224,7 @@ static inline void mdss_mdp_cmd_clk_on(struct mdss_mdp_cmd_ctx *ctx)
 			mdss_mdp_ctl_restore(ctx->ctl);
 			mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 
-			if (mdss_mdp_cmd_tearcheck_setup(ctx->ctl))
+			if (mdss_mdp_cmd_tearcheck_setup(ctx->ctl, true))
 				pr_warn("tearcheck setup failed\n");
 			ctx->idle_pc = false;
 		} else {
@@ -873,6 +879,8 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 
 		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_OFF, NULL);
 		WARN(ret, "intf %d unblank error (%d)\n", ctl->intf_num, ret);
+
+		mdss_mdp_cmd_tearcheck_setup(ctl, false);
 	}
 
 	memset(ctx, 0, sizeof(*ctx));

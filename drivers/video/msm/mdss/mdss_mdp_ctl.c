@@ -2114,7 +2114,7 @@ int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl, int power_state)
 	mdss_mdp_hist_intr_setup(&mdata->hist_intr, MDSS_IRQ_SUSPEND);
 
 	if (ctl->stop_fnc) {
-		ret = ctl->stop_fnc(ctl, power_state);
+		ret = ctl->stop_fnc(ctl);
 		if (ctl->panel_data->panel_info.fbc.enabled)
 			mdss_mdp_ctl_fbc_enable(0, ctl->mixer_left,
 				&ctl->panel_data->panel_info);
@@ -2123,10 +2123,11 @@ int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl, int power_state)
 	}
 
 	if (sctl && sctl->stop_fnc) {
-		ret = sctl->stop_fnc(sctl, power_state);
+		ret = sctl->stop_fnc(sctl);
 		if (ctl->panel_data->panel_info.fbc.enabled)
 			mdss_mdp_ctl_fbc_enable(0, sctl->mixer_left,
 				&sctl->panel_data->panel_info);
+		mdss_mdp_ctl_split_display_enable(0, ctl, sctl);
 	}
 	if (ret) {
 		pr_warn("error powering off intf ctl=%d\n", ctl->num);
