@@ -1418,17 +1418,10 @@ static inline int venus_hfi_power_off(struct venus_hfi_device *device)
 	}
 
 	dprintk(VIDC_DBG, "Entering power collapse\n");
-	/*Temporarily enable clocks to make TZ call.*/
-	rc = venus_hfi_clk_enable(device);
-	if (rc) {
-		dprintk(VIDC_WARN, "Failed to enable clocks before TZ call\n");
-		return rc;
-	}
 	rc = venus_hfi_tzbsp_set_video_state(TZBSP_VIDEO_STATE_SUSPEND);
 	if (rc) {
 		dprintk(VIDC_WARN, "Failed to suspend video core %d\n", rc);
-		venus_hfi_clk_disable(device);
-		return rc;
+		goto err_tzbsp_suspend;
 	}
 	venus_hfi_iommu_detach(device);
 
@@ -1443,19 +1436,32 @@ static inline int venus_hfi_power_off(struct venus_hfi_device *device)
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to enable gdsc in %s Err code = %d\n",
 			__func__, rc);
-		goto err_acquire_gdsc;
+		goto err_acquire_regulators;
 	}
 	venus_hfi_disable_unprepare_clks(device);
 	rc = venus_hfi_disable_regulators(device);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to disable gdsc\n");
-		goto err_disable_gdsc;
+		goto err_disable_regulators;
 	}
-err_disable_gdsc:
-err_acquire_gdsc:
+
 	venus_hfi_unvote_buses(device);
 	device->power_enabled = false;
 	dprintk(VIDC_INFO, "Venus power collapsed\n");
+
+	return rc;
+
+err_disable_regulators:
+	if (venus_hfi_prepare_enable_clks(device))
+		dprintk(VIDC_ERR, "Failed prepare_enable_clks\n");
+	if (venus_hfi_hand_off_regulators(device))
+		dprintk(VIDC_ERR, "Failed hand_off_regulators\n");
+err_acquire_regulators:
+	if (venus_hfi_iommu_attach(device))
+		dprintk(VIDC_ERR, "Failed iommu_attach\n");
+	if (venus_hfi_tzbsp_set_video_state(TZBSP_VIDEO_STATE_RESUME))
+		dprintk(VIDC_ERR, "Failed TZBSP_RESUME\n");
+err_tzbsp_suspend:
 	return rc;
 }
 
@@ -1485,11 +1491,7 @@ static inline int venus_hfi_power_on(struct venus_hfi_device *device)
 		goto err_enable_gdsc;
 	}
 
-	if (device->clk_state == DISABLED_UNPREPARED)
-		rc = venus_hfi_prepare_enable_clks(device);
-	else if (device->clk_state == DISABLED_PREPARED)
-		rc = venus_hfi_clk_enable(device);
-
+	rc = venus_hfi_prepare_enable_clks(device);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to enable clocks\n");
 		goto err_enable_clk;
@@ -1570,7 +1572,7 @@ err_reset_core:
 err_set_video_state:
 	venus_hfi_iommu_detach(device);
 err_iommu_attach:
-	venus_hfi_clk_disable(device);
+	venus_hfi_disable_unprepare_clks(device);
 err_enable_clk:
 	venus_hfi_disable_regulators(device);
 err_enable_gdsc:
@@ -3057,8 +3059,10 @@ static void venus_hfi_pm_hndlr(struct work_struct *work)
 	}
 
 	rc = venus_hfi_power_off(device);
-	if (rc)
+	if (rc) {
 		dprintk(VIDC_ERR, "Failed venus power off\n");
+		goto err_power_off;
+	}
 
 	/* Cancel pending delayed works if any */
 	cancel_delayed_work(&venus_hfi_pm_work);
@@ -3066,6 +3070,7 @@ static void venus_hfi_pm_hndlr(struct work_struct *work)
 	mutex_unlock(&device->write_lock);
 	return;
 
+err_power_off:
 skip_power_off:
 
 	/* Reset PC_READY bit as power_off is skipped, if set by Venus */
@@ -3082,6 +3087,7 @@ skip_power_off:
 		device->last_packet_type, ctrl_status);
 
 	mutex_unlock(&device->write_lock);
+	venus_hfi_alloc_ocmem(device, device->res->ocmem_size);
 	return;
 }
 
