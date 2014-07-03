@@ -1337,6 +1337,7 @@ bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type)
 	struct mdss_dsi_phy_ctrl *pd;
 	int i, off, ln, offset;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL, *temp_ctrl = NULL;
+	u32 ctrl_rev;
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
@@ -1424,8 +1425,11 @@ bool __mdss_dsi_clk_enabled(struct mdss_dsi_ctrl_pdata *ctrl, u8 clk_type)
 	MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x0170, 0x5f);
 	wmb();
 
+	ctrl_rev = MIPI_INP(ctrl_pdata->ctrl_base);
+
 	/* DSI_0_PHY_DSIPHY_GLBL_TEST_CTRL */
-	if ((ctrl_pdata->panel_data).panel_info.pdest == DISPLAY_1)
+	if (((ctrl_pdata->panel_data).panel_info.pdest == DISPLAY_1) ||
+			(ctrl_rev == MDSS_DSI_HW_REV_103_1))
 		MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x01d4, 0x01);
 	else
 		MIPI_OUTP((ctrl_pdata->phy_io.base) + 0x01d4, 0x00);
