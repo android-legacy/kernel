@@ -2298,6 +2298,7 @@ static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 {
 	struct msm_sync_pt_data *sync_pt_data;
 	struct msm_fb_data_type *mfd;
+	int fence_cnt;
 
 	sync_pt_data = container_of(p, struct msm_sync_pt_data, notifier);
 	mfd = container_of(sync_pt_data, struct msm_fb_data_type,
@@ -2330,7 +2331,13 @@ static int __mdss_fb_sync_buf_done_callback(struct notifier_block *p,
 		pr_debug("%s: frame done\n", sync_pt_data->fence_name);
 		mdss_fb_signal_timeline(sync_pt_data);
 		break;
-	case MDP_NOTIFY_FRAME_START:
+	case MDP_NOTIFY_FRAME_CFG_DONE:
+		if (sync_pt_data->async_wait_fences)
+			__mdss_fb_copy_fence(sync_pt_data,
+					sync_pt_data->temp_fen,
+					&sync_pt_data->temp_fen_cnt);
+		break;
+	case MDP_NOTIFY_FRAME_CTX_DONE:
 		mdss_fb_release_kickoff(mfd);
 		break;
 	}

@@ -136,8 +136,8 @@ enum mdss_mdp_reg_bus_cfg {
  *			buffer is ready.
  */
 enum mdp_commit_stage_type {
-	MDP_COMMIT_STAGE_WAIT_FOR_PINGPONG,
-	MDP_COMMIT_STAGE_PINGPONG_DONE,
+	MDP_COMMIT_STAGE_SETUP_DONE,
+	MDP_COMMIT_STAGE_READY_FOR_KICKOFF,
 };
 
 struct mdss_mdp_ctl;
@@ -495,12 +495,6 @@ struct mdss_overlay_private {
 	struct work_struct retire_work;
 	int retire_cnt;
 	bool kickoff_released;
-};
-
-struct mdss_mdp_commit_cb {
-	void *data;
-	int (*commit_cb_fnc) (enum mdp_commit_stage_type commit_state,
-		void *data);
 };
 
 struct mdss_mdp_commit_cb {
