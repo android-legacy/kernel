@@ -52,6 +52,7 @@ static int mdss_mdp_overlay_fb_parse_dt(struct msm_fb_data_type *mfd);
 static int mdss_mdp_overlay_off(struct msm_fb_data_type *mfd);
 static void __overlay_kickoff_requeue(struct msm_fb_data_type *mfd);
 static void __vsync_retire_signal(struct msm_fb_data_type *mfd, int val);
+static int __vsync_set_vsync_handler(struct msm_fb_data_type *mfd);
 
 static inline bool is_ov_right_blend(struct mdp_rect *left_blend,
 	struct mdp_rect *right_blend, u32 left_lm_w)
@@ -1417,6 +1418,8 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 		mdss_mdp_ctl_notify(ctl, MDP_NOTIFY_FRAME_BEGIN);
 
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
+
+	__vsync_set_vsync_handler(mfd);
 
 	if (data) {
 		mdss_mdp_set_roi(ctl, data);
@@ -3679,14 +3682,6 @@ __vsync_retire_get_fence(struct msm_sync_pt_data *sync_pt_data)
 		return ERR_PTR(-EPERM);
 	}
 
-	if (!mdp5_data->vsync_retire_handler.enabled) {
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
-		rc = ctl->add_vsync_handler(ctl,
-				&mdp5_data->vsync_retire_handler);
-		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
-		if (IS_ERR_VALUE(rc))
-			return ERR_PTR(rc);
-	}
 	value = mdp5_data->vsync_timeline->value + 1 + mdp5_data->retire_cnt;
 	mdp5_data->retire_cnt++;
 
@@ -3708,7 +3703,7 @@ static int __vsync_set_vsync_handler(struct msm_fb_data_type *mfd)
 	if (!ctl->add_vsync_handler)
 		return -EOPNOTSUPP;
 
-	if (!mdss_mdp_ctl_is_power_on(ctl)) {
+	if (!ctl->power_on) {
 		pr_debug("fb%d vsync pending first update\n", mfd->index);
 		return -EPERM;
 	}
