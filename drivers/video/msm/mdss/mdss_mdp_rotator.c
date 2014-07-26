@@ -744,21 +744,20 @@ int mdss_mdp_rotator_play(struct msm_fb_data_type *mfd,
 		goto dst_buf_fail;
 	}
 
-	ret = mdss_mdp_overlay_get_buf(mfd, &src_buf, &req->data, 1, flgs);
+	ret = mdss_mdp_data_get(&src_buf, &req->data, 1, flgs);
 	if (ret) {
 		pr_err("src_data pmem error\n");
-		mdss_mdp_overlay_free_buf(&rot->src_buf);
 		goto dst_buf_fail;
 	}
-	mdss_mdp_overlay_free_buf(&rot->src_buf);
-	memcpy(&rot->src_buf, &src_buf, sizeof(struct mdss_mdp_data));
 
-	ret = mdss_mdp_data_map(&rot->src_buf);
+	ret = mdss_mdp_data_map(&src_buf);
 	if (ret) {
 		pr_err("unable to map source buffer\n");
-		mdss_mdp_data_free(&rot->src_buf);
+		mdss_mdp_data_free(&src_buf);
 		goto dst_buf_fail;
 	}
+	mdss_mdp_data_free(&rot->src_buf);
+	memcpy(&rot->src_buf, &src_buf, sizeof(struct mdss_mdp_data));
 
 	mdss_mdp_data_free(&rot->dst_buf);
 	ret = mdss_mdp_data_get(&rot->dst_buf, &req->dst_data, 1, flgs);

@@ -649,8 +649,7 @@ static int mdss_mdp_map_buffer(struct mdss_mdp_img_data *data)
 			data->mapped = true;
 		} else {
 			ret = ion_phys(iclient, data->srcp_ihdl,
-					&data->addr,
-					(size_t *) &data->len);
+					&data->addr, (size_t *) &data->len);
 		}
 
 		if (IS_ERR_VALUE(ret)) {
@@ -670,7 +669,7 @@ static int mdss_mdp_map_buffer(struct mdss_mdp_img_data *data)
 		data->addr += data->offset;
 		data->len -= data->offset;
 
-		pr_debug("mem=%d ihdl=%p buf=0x%pa len=%lu\n", img->memory_id,
+		pr_debug("ihdl=%p buf=0x%pa len=0x%lu\n",
 			 data->srcp_ihdl, &data->addr, data->len);
 	} else {
 		mdss_mdp_put_img(data);
@@ -680,11 +679,10 @@ static int mdss_mdp_map_buffer(struct mdss_mdp_img_data *data)
 	return ret;
 }
 
-
 int mdss_mdp_data_get(struct mdss_mdp_data *data, struct msmfb_data *planes,
 		int num_planes, u32 flags)
 {
-	int i, rc;
+	int i, rc = 0;
 
 	if ((num_planes <= 0) || (num_planes > MAX_PLANES))
 		return -EINVAL;
@@ -709,7 +707,7 @@ int mdss_mdp_data_get(struct mdss_mdp_data *data, struct msmfb_data *planes,
 
 int mdss_mdp_data_map(struct mdss_mdp_data *data)
 {
-	int i, rc;
+	int i, rc = 0;
 
 	if (!data || !data->num_planes)
 		return -EINVAL;
@@ -733,10 +731,9 @@ void mdss_mdp_data_free(struct mdss_mdp_data *data)
 {
 	int i;
 
-	mdss_iommu_ctrl(1);
 	for (i = 0; i < data->num_planes && data->p[i].len; i++)
 		mdss_mdp_put_img(&data->p[i]);
-	mdss_iommu_ctrl(0);
+
 	data->num_planes = 0;
 }
 

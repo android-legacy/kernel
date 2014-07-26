@@ -305,6 +305,7 @@ struct mdss_mdp_plane_sizes {
 struct mdss_mdp_img_data {
 	dma_addr_t addr;
 	unsigned long len;
+	u32 offset;
 	u32 flags;
 	int p_need;
 	bool mapped;
@@ -728,11 +729,6 @@ int mdss_mdp_overlay_req_check(struct msm_fb_data_type *mfd,
 			       struct mdp_overlay *req,
 			       struct mdss_mdp_format_params *fmt);
 int mdss_mdp_overlay_vsync_ctrl(struct msm_fb_data_type *mfd, int en);
-int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
-			     struct mdss_mdp_data *data,
-			     struct msmfb_data *planes,
-			     int num_planes,
-			     u32 flags);
 int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	struct mdp_overlay *req, struct mdss_mdp_pipe **ppipe,
 	struct mdss_mdp_pipe *left_blend_pipe, bool is_single_layer);

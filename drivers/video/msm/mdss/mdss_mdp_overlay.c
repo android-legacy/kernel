@@ -978,61 +978,6 @@ static int mdss_mdp_overlay_set(struct msm_fb_data_type *mfd,
 	return ret;
 }
 
-int mdss_mdp_overlay_get_buf(struct msm_fb_data_type *mfd,
-					   struct mdss_mdp_data *data,
-					   struct msmfb_data *planes,
-					   int num_planes,
-					   u32 flags)
-{
-	int i, rc;
-
-	if ((num_planes <= 0) || (num_planes > MAX_PLANES))
-		return -EINVAL;
-
-	rc = mdss_iommu_ctrl(1);
-	if (IS_ERR_VALUE(rc)) {
-		pr_err("Iommu attach failed\n");
-		goto end;
-	}
-
-	memset(data, 0, sizeof(*data));
-	for (i = 0; i < num_planes; i++) {
-		data->p[i].flags = flags;
-		rc = mdss_mdp_get_img(&planes[i], &data->p[i]);
-		if (rc) {
-			pr_err("failed to map buf p=%d flags=%x\n", i, flags);
-			while (i > 0) {
-				i--;
-				mdss_mdp_put_img(&data->p[i]);
-			}
-			break;
-		}
-	}
-
-	mdss_iommu_ctrl(0);
-	data->num_planes = i;
-end:
-	return rc;
-}
-
-int mdss_mdp_overlay_free_buf(struct mdss_mdp_data *data)
-{
-	int i, rc;
-
-	rc = mdss_iommu_ctrl(1);
-	if (IS_ERR_VALUE(rc)) {
-		pr_err("Iommu attach failed\n");
-		return rc;
-	}
-
-	for (i = 0; i < data->num_planes && data->p[i].len; i++)
-		mdss_mdp_put_img(&data->p[i]);
-
-	mdss_iommu_ctrl(0);
-	data->num_planes = 0;
-	return 0;
-}
-
 /**
  * __mdss_mdp_overlay_free_list_purge() - clear free list of buffers
  * @mfd:	Msm frame buffer data structure for the associated fb
@@ -1124,10 +1069,10 @@ static void mdss_mdp_overlay_cleanup(struct msm_fb_data_type *mfd)
 		 * soon as session is closed.
 		 */
 		if (pipe->flags & MDP_SECURE_DISPLAY_OVERLAY_SESSION)
-			mdss_mdp_overlay_free_buf(&pipe->front_buf);
+			mdss_mdp_data_free(&pipe->front_buf);
 		else
 			__mdss_mdp_overlay_free_list_add(mfd, &pipe->front_buf);
-		mdss_mdp_overlay_free_buf(&pipe->back_buf);
+		mdss_mdp_data_free(&pipe->back_buf);
 		list_del_init(&pipe->list);
 		if (recovery_mode) {
 			mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_left);
@@ -1430,6 +1375,23 @@ int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 	}
 
 	mutex_lock(&mdp5_data->ov_lock);
+	ret = mdss_mdp_overlay_start(mfd);
+	if (ret) {
+		pr_err("unable to start overlay %d (%d)\n", mfd->index, ret);
+		mutex_unlock(&mdp5_data->ov_lock);
+		if (ctl->shared_lock)
+			mutex_unlock(ctl->shared_lock);
+		return ret;
+	}
+
+	ret = mdss_iommu_ctrl(1);
+	if (IS_ERR_VALUE(ret)) {
+		pr_err("iommu attach failed rc=%d\n", ret);
+		mutex_unlock(&mdp5_data->ov_lock);
+		if (ctl->shared_lock)
+			mutex_unlock(ctl->shared_lock);
+		return ret;
+	}
 	mutex_lock(&mdp5_data->list_lock);
 
 	/*
@@ -1550,7 +1512,9 @@ commit_fail:
 	mutex_unlock(&mdp5_data->ov_lock);
 	if (ctl->shared_lock)
 		mutex_unlock(ctl->shared_lock);
+	mdss_iommu_ctrl(0);
 	ATRACE_END(__func__);
+
 	return ret;
 }
 
@@ -1755,7 +1719,6 @@ static int mdss_mdp_overlay_queue(struct msm_fb_data_type *mfd,
 	ret = mdss_mdp_data_get(src_data, &req->data, 1, flags);
 	if (IS_ERR_VALUE(ret))
 		pr_err("src_data pmem error\n");
-	}
 
 	mdss_mdp_pipe_unmap(pipe);
 
@@ -1778,8 +1741,6 @@ static int mdss_mdp_overlay_play(struct msm_fb_data_type *mfd,
 		ret = -EPERM;
 		goto done;
 	}
-
-	mdss_mdp_release_splash_pipe(mfd);
 
 	if (req->id & MDSS_MDP_ROT_SESSION_MASK) {
 		ret = mdss_mdp_rotator_play(mfd, req);
