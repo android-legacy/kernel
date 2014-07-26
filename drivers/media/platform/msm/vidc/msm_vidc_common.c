@@ -2364,7 +2364,6 @@ static int msm_comm_session_init(int flipped_state,
 			inst->session_type, fourcc);
 		goto exit;
 	}
-	inst->ftb_count = 0;
 	change_inst_state(inst, MSM_VIDC_OPEN);
 exit:
 	return rc;
@@ -3295,7 +3294,7 @@ int msm_comm_qbuf(struct vb2_buffer *vb)
 			if (core->resources.dynamic_bw_update)
 				msm_comm_compute_idle_time(inst);
 
-			if (atomic_read(&inst->get_seq_hdr_cnt) &&
+			if (atomic_read(&inst->seq_hdr_reqs) &&
 			   inst->session_type == MSM_VIDC_ENCODER) {
 				seq_hdr.seq_hdr = vb->v4l2_planes[0].
 					m.userptr;
@@ -3307,7 +3306,7 @@ int msm_comm_qbuf(struct vb2_buffer *vb)
 					dprintk(VIDC_DBG, "Seq_hdr: %p\n",
 						inst->vb2_seq_hdr);
 				}
-				atomic_dec(&inst->get_seq_hdr_cnt);
+				atomic_dec(&inst->seq_hdr_reqs);
 			} else {
 				rc = msm_comm_check_dcvs_supported(inst);
 				if (!rc) {
@@ -3335,7 +3334,6 @@ int msm_comm_qbuf(struct vb2_buffer *vb)
 					msm_vidc_debugfs_update(inst,
 						MSM_VIDC_DEBUGFS_EVENT_FTB);
 			}
-			inst->ftb_count++;
 		} else {
 			dprintk(VIDC_ERR,
 				"This capability is not supported: %d\n",
