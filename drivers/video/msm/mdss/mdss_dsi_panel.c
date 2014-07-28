@@ -85,23 +85,12 @@ static void mdss_dsi_panel_bklt_pwm(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 		}
 	}
 
-	if (ctrl->pwm_period >= USEC_PER_SEC) {
-		ret = pwm_config_us(ctrl->pwm_bl, duty, ctrl->pwm_period);
-		if (ret) {
-			pr_err("%s: pwm_config_us() failed err=%d.\n",
-					__func__, ret);
-			return;
-		}
-	} else {
-		period_ns = ctrl->pwm_period * NSEC_PER_USEC;
-		ret = pwm_config(ctrl->pwm_bl,
-				level * period_ns / ctrl->bklt_max,
-				period_ns);
-		if (ret) {
-			pr_err("%s: pwm_config() failed err=%d.\n",
-					__func__, ret);
-			return;
-		}
+	if (!ctrl->pwm_enabled) {
+		ret = pwm_enable(ctrl->pwm_bl);
+		if (ret)
+			pr_err("%s: pwm_enable() failed err=%d\n", __func__,
+				ret);
+		ctrl->pwm_enabled = 1;
 	}
 }
 
