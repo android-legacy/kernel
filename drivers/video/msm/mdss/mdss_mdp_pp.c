@@ -1758,7 +1758,7 @@ int mdss_mdp_pp_setup(struct mdss_mdp_ctl *ctl)
 	/* TODO: have some sort of reader/writer lock to prevent unclocked
 	 * access while display power is toggled */
 	mutex_lock(&ctl->lock);
-	if (!ctl->power_on) {
+	if (!mdss_mdp_ctl_is_power_on(ctl)) {
 		ret = -EPERM;
 		goto error;
 	}

@@ -305,6 +305,12 @@ static inline bool is_split_dst(struct msm_fb_data_type *mfd)
 {
 	return (mfd && (mfd->split_mode == MDP_SPLIT_MODE_DST));
 }
+
+static inline bool mdss_fb_is_panel_power_on(struct msm_fb_data_type *mfd)
+{
+	return (mfd->panel_power_state != MDSS_PANEL_POWER_OFF);
+}
+
 int mdss_fb_get_phys_info(dma_addr_t *start, unsigned long *len, int fb_num);
 void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl);
 void mdss_fb_update_backlight(struct msm_fb_data_type *mfd);

@@ -519,7 +519,7 @@ static void mdss_mdp_traffic_shaper(struct mdss_mdp_ctl *ctl,
 {
 	bool traffic_shaper_enabled = 0;
 
-	if (ctl->power_on) {
+	if (mdss_mdp_ctl_is_power_on(ctl)) {
 		traffic_shaper_enabled = mdss_mdp_traffic_shaper_helper
 			(ctl, ctx, enable);
 	}

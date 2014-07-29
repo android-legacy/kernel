@@ -664,6 +664,11 @@ static inline bool mdss_mdp_is_nrt_vbif_client(struct mdss_data_type *mdata,
 			pipe->mixer_left->rotator_mode;
 }
 
+static inline bool mdss_mdp_ctl_is_power_on(struct mdss_mdp_ctl *ctl)
+{
+	return (ctl->power_state != MDSS_PANEL_POWER_OFF);
+}
+
 irqreturn_t mdss_mdp_isr(int irq, void *ptr);
 void mdss_mdp_irq_clear(struct mdss_data_type *mdata,
 		u32 intr_type, u32 intf_num);

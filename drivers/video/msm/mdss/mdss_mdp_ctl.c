@@ -1100,7 +1100,7 @@ static inline void mdss_mdp_ctl_perf_update_bus(struct mdss_data_type *mdata,
 		struct mdss_mdp_ctl *ctl;
 		struct mdss_mdp_mixer *mixer;
 		ctl = mdata->ctl_off + i;
-		if (ctl->power_on) {
+		if (mdss_mdp_ctl_is_power_on(ctl)) {
 			/*
 			 * If traffic shaper is enabled we must check
 			 * if additional bandwidth is required.
@@ -1164,7 +1164,8 @@ void mdss_mdp_ctl_perf_release_bw(struct mdss_mdp_ctl *ctl)
 	for (i = 0; i < mdata->nctl; i++) {
 		struct mdss_mdp_ctl *ctl_local = mdata->ctl_off + i;
 
-		if (ctl_local->power_on && ctl_local->is_video_mode)
+		if (mdss_mdp_ctl_is_power_on(ctl_local) &&
+			ctl_local->is_video_mode)
 			goto exit;
 	}
 
@@ -1224,7 +1225,7 @@ u32 mdss_mdp_get_mdp_clk_rate(struct mdss_data_type *mdata)
 	for (i = 0; i < mdata->nctl; i++) {
 		struct mdss_mdp_ctl *ctl;
 		ctl = mdata->ctl_off + i;
-		if (ctl->power_on) {
+		if (mdss_mdp_ctl_is_power_on(ctl)) {
 			clk_rate = max(ctl->cur_perf.mdp_clk_rate,
 							clk_rate);
 			clk_rate = clk_round_rate(clk, clk_rate);
@@ -1242,7 +1243,7 @@ static bool is_traffic_shaper_enabled(struct mdss_data_type *mdata)
 	for (i = 0; i < mdata->nctl; i++) {
 		struct mdss_mdp_ctl *ctl;
 		ctl = mdata->ctl_off + i;
-		if (ctl->power_on)
+		if (mdss_mdp_ctl_is_power_on(ctl))
 			if (ctl->traffic_shaper_enabled)
 				return true;
 	}
@@ -1273,7 +1274,7 @@ static void mdss_mdp_ctl_perf_update(struct mdss_mdp_ctl *ctl,
 	 */
 	is_bw_released = !mdss_mdp_ctl_perf_get_transaction_status(ctl);
 
-	if (ctl->power_on) {
+	if (mdss_mdp_ctl_is_power_on(ctl)) {
 		if (ctl->perf_release_ctl_bw &&
 			mdata->enable_rotator_bw_release)
 			mdss_mdp_perf_release_ctl_bw(ctl, new);
@@ -2143,7 +2144,7 @@ void mdss_mdp_ctl_restore(void)
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 	for (cnum = MDSS_MDP_CTL0; cnum < mdata->nctl; cnum++) {
 		ctl = mdata->ctl_off + cnum;
-		if (!ctl->power_on)
+		if (!mdss_mdp_ctl_is_power_on(ctl))
 			continue;
 
 		pr_debug("restoring ctl%d, intf_type=%d\n", cnum,
@@ -2228,7 +2229,7 @@ int mdss_mdp_ctl_start(struct mdss_mdp_ctl *ctl, bool handoff)
 
 	pr_debug("ctl_num=%d, power_state=%d\n", ctl->num, ctl->power_state);
 
-	if (mdss_mdp_ctl_is_power_on_interactive(ctl)) {
+	if (mdss_mdp_ctl_is_power_on(ctl)) {
 		pr_debug("%d: panel already on!\n", __LINE__);
 		return 0;
 	}
@@ -2247,8 +2248,7 @@ int mdss_mdp_ctl_start(struct mdss_mdp_ctl *ctl, bool handoff)
 
 	mutex_lock(&ctl->lock);
 
-	if (mdss_mdp_ctl_is_power_off(ctl))
-		memset(&ctl->cur_perf, 0, sizeof(ctl->cur_perf));
+	memset(&ctl->cur_perf, 0, sizeof(ctl->cur_perf));
 
 	/*
 	 * keep power_on false during handoff to avoid unexpected
@@ -2288,9 +2288,8 @@ int mdss_mdp_ctl_start(struct mdss_mdp_ctl *ctl, bool handoff)
 
 	mdss_mdp_hist_intr_setup(&mdata->hist_intr, MDSS_IRQ_RESUME);
 
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 error:
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 	mutex_unlock(&ctl->lock);
 
 	return ret;
@@ -2319,7 +2318,7 @@ int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl, int power_state)
 	mdss_mdp_hist_intr_setup(&mdata->hist_intr, MDSS_IRQ_SUSPEND);
 
 	if (ctl->stop_fnc) {
-		ret = ctl->stop_fnc(ctl);
+		ret = ctl->stop_fnc(ctl, power_state);
 		if (ctl->panel_data->panel_info.fbc.enabled)
 			mdss_mdp_ctl_fbc_enable(0, ctl->mixer_left,
 				&ctl->panel_data->panel_info);
@@ -2328,7 +2327,7 @@ int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl, int power_state)
 	}
 
 	if (sctl && sctl->stop_fnc) {
-		ret = sctl->stop_fnc(sctl);
+		ret = sctl->stop_fnc(sctl, power_state);
 		if (ctl->panel_data->panel_info.fbc.enabled)
 			mdss_mdp_ctl_fbc_enable(0, sctl->mixer_left,
 				&sctl->panel_data->panel_info);
@@ -2338,14 +2337,6 @@ int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl, int power_state)
 		pr_warn("error powering off intf ctl=%d\n", ctl->num);
 		goto end;
 	}
-
-	if (mdss_panel_is_power_on(power_state)) {
-		pr_debug("panel is not off, leaving ctl power on\n");
-		goto end;
-	}
-
-	if (sctl)
-		mdss_mdp_ctl_split_display_enable(0, ctl, sctl);
 
 	mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_TOP, 0);
 	if (sctl)
@@ -2361,6 +2352,11 @@ int mdss_mdp_ctl_stop(struct mdss_mdp_ctl *ctl, int power_state)
 		mdss_mdp_ctl_write(ctl, off, 0);
 	}
 
+	ctl->power_state = power_state;
+	ctl->play_cnt = 0;
+	mdss_mdp_ctl_perf_update(ctl, 0);
+
+end:
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 
 	mutex_unlock(&ctl->lock);

@@ -89,13 +89,11 @@ enum {
 enum {
 	MDSS_PANEL_POWER_OFF = 0,
 	MDSS_PANEL_POWER_ON,
-	MDSS_PANEL_POWER_DOZE,
 };
 
 enum {
 	MDSS_PANEL_BLANK_BLANK = 0,
 	MDSS_PANEL_BLANK_UNBLANK,
-	MDSS_PANEL_BLANK_LOW_POWER,
 };
 
 enum {
@@ -540,6 +538,20 @@ static inline int mdss_mdp_max_fetch_lines(struct mdss_panel_info *pinfo)
 
 int mdss_register_panel(struct platform_device *pdev,
 	struct mdss_panel_data *pdata);
+
+/*
+ * mdss_panel_is_panel_power_on: - checks if a panel is on
+ * @pdata: pointer to the panel struct associated to the panel
+ *
+ * A panel is considered to be on as long as it can accept any commands
+ * or data. Sometimes it is posible to program the panel to be in a low
+ * power state. This function returns false only if panel has explicitly
+ * been turned off.
+ */
+static inline bool mdss_panel_is_panel_power_on(struct mdss_panel_data *pdata)
+{
+	return (pdata->panel_info.panel_power_state != MDSS_PANEL_POWER_OFF);
+}
 
 /**
  * mdss_panel_intf_type: - checks if a given intf type is primary
