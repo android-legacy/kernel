@@ -868,7 +868,6 @@ void mdss_bus_bandwidth_ctrl(int enable)
 			pm_runtime_put(&mdata->pdev->dev);
 		} else {
 			pm_runtime_get_sync(&mdata->pdev->dev);
-			mdss_mdp_idle_pc_restore();
 			msm_bus_scale_client_update_request(
 				mdata->bus_hdl, mdata->curr_bw_uc_idx);
 		}
@@ -1184,7 +1183,6 @@ int mdss_hw_init(struct mdss_data_type *mdata)
 	char *offset;
 	struct mdss_mdp_pipe *vig;
 
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 	mdss_hw_rev_init(mdata);
 
 	/* disable hw underrun recovery */
@@ -1226,7 +1224,6 @@ int mdss_hw_init(struct mdss_data_type *mdata)
 		for (i = 0; i < mdata->nvig_pipes; i++)
 			mdss_mdp_hscl_init(&vig[i]);
 
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
 	pr_debug("MDP hw init done\n");
 
 	return 0;
