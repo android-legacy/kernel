@@ -531,12 +531,6 @@ int mdss_mdp_rotator_setup(struct msm_fb_data_type *mfd,
 			goto rot_err;
 		}
 
-		if (work_pending(&rot->commit_work)) {
-			mutex_unlock(&rotator_lock);
-			flush_work(&rot->commit_work);
-			mutex_lock(&rotator_lock);
-		}
-
 		if (rot->format != fmt->format)
 			format_changed = true;
 
@@ -600,6 +594,12 @@ int mdss_mdp_rotator_setup(struct msm_fb_data_type *mfd,
 		swap(rot->dst.w, rot->dst.h);
 
 	rot->params_changed++;
+
+	/* If the format changed, release the smp alloc */
+	if (format_changed && rot->pipe) {
+		mdss_mdp_rotator_busy_wait(rot);
+		mdss_mdp_smp_release(rot->pipe);
+	}
 
 	ret = __mdss_mdp_rotator_pipe_reserve(rot);
 	if (!ret && rot->next)
