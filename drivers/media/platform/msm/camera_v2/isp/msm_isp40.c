@@ -591,7 +591,7 @@ static uint32_t msm_vfe40_reset_values[ISP_RST_MAX] =
 
 
 static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev ,
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 		enum msm_isp_reset_type reset_type, uint32_t blocking)
 #else
 				enum msm_isp_reset_type reset_type)
@@ -605,7 +605,7 @@ static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev ,
 	rst_val = msm_vfe40_reset_values[reset_type];
 	init_completion(&vfe_dev->reset_complete);
 	msm_camera_io_w_mb(rst_val, vfe_dev->vfe_base + 0xC);
-#ifndef CONFIG_MACH_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 	return wait_for_completion_timeout(
 		&vfe_dev->reset_complete, msecs_to_jiffies(50));
 #else
@@ -908,7 +908,7 @@ static void msm_vfe40_update_camif_state(struct vfe_device *vfe_dev,
 		val &= 0xFFFFFF3F;
 		val = val | bus_en << 7 | vfe_en << 6;
 		msm_camera_io_w(val, vfe_dev->vfe_base + 0x2F8);
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 		msm_camera_io_w_mb(0x4, vfe_dev->vfe_base + 0x2F4);
 #endif
 		msm_camera_io_w_mb(0x1, vfe_dev->vfe_base + 0x2F4);
@@ -919,7 +919,7 @@ static void msm_vfe40_update_camif_state(struct vfe_device *vfe_dev,
 	} else if (update_state == DISABLE_CAMIF_IMMEDIATELY) {
 		msm_camera_io_w_mb(0x6, vfe_dev->vfe_base + 0x2F4);
 		vfe_dev->axi_data.src_info[VFE_PIX_0].active = 0;
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	} else if (update_state == DISABLE_CAMIF_IMMEDIATELY_VFE_RECOVER) {
 		/*disable image data capture immediately*/
 		msm_camera_io_w_mb(0x2, vfe_dev->vfe_base + 0x2F4);
@@ -1088,7 +1088,7 @@ static void msm_vfe40_axi_clear_wm_xbar_reg(
 		vfe_dev->vfe_base + VFE40_XBAR_BASE(wm));
 }
 
-#ifndef CONFIG_MACH_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 #define MSM_ISP40_TOTAL_WM_UB 819
 #else
 #define MSM_ISP40_TOTAL_WM_UB 1140
@@ -1162,7 +1162,7 @@ static void msm_vfe40_update_ping_pong_addr(
 		VFE40_PING_PONG_BASE(wm_idx, pingpong_status));
 }
 
-#ifndef CONFIG_MACH_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 static long msm_vfe40_axi_halt(struct vfe_device *vfe_dev)
 {
 	uint32_t halt_mask;
@@ -1463,7 +1463,7 @@ static void msm_vfe40_get_error_mask(
 	*error_mask1 = 0x00FFFEFF;
 }
 
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 static void msm_vfe40_get_overflow_mask(uint32_t *overflow_mask)
 {
 	*overflow_mask = 0x00FFFE7E;
@@ -1570,7 +1570,7 @@ struct msm_vfe_hardware_info vfe40_hw_info = {
 			.release_hw = msm_vfe40_release_hardware,
 			.get_platform_data = msm_vfe40_get_platform_data,
 			.get_error_mask = msm_vfe40_get_error_mask,
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 			.get_overflow_mask = msm_vfe40_get_overflow_mask,
 			.get_irq_mask = msm_vfe40_get_irq_mask,
 			.restore_irq_mask = msm_vfe40_restore_irq_mask,

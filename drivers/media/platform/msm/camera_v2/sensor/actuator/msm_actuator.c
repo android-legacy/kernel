@@ -109,7 +109,7 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 					i2c_byte2 = (value & 0xFF00) >> 8;
 				}
 			} else {
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 					i2c_byte1 = ((value & 0x0300) >> 8) | 0xF4;
 #else
 					i2c_byte1 = (value & 0xFF00) >> 8;
@@ -715,7 +715,7 @@ static int msm_actuator_close(struct v4l2_subdev *sd,
 	struct v4l2_subdev_fh *fh) {
 	int rc = 0;
 	struct msm_actuator_ctrl_t *a_ctrl =  v4l2_get_subdevdata(sd);
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
     int rc2 = 0;
 #endif
 	CDBG("Enter\n");
@@ -723,7 +723,7 @@ static int msm_actuator_close(struct v4l2_subdev *sd,
 		pr_err("failed\n");
 		return -EINVAL;
 	}
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	CDBG("back to DAC 0x0000!\n");
 	rc2 = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
 		&a_ctrl->i2c_client,

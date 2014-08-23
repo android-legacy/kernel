@@ -21,7 +21,7 @@
 #define NO_SET_RATE -1
 #define INIT_RATE -2
 
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 extern int gpio69_count;
 #endif
 
