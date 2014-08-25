@@ -734,7 +734,8 @@ void mdss_bus_bandwidth_ctrl(int enable)
 		if (!enable) {
 			msm_bus_scale_client_update_request(
 				mdata->bus_hdl, 0);
-			pm_runtime_put(&mdata->pdev->dev);
+			pm_runtime_mark_last_busy(&mdata->pdev->dev);
+			pm_runtime_put_autosuspend(&mdata->pdev->dev);
 		} else {
 			pm_runtime_get_sync(&mdata->pdev->dev);
 			msm_bus_scale_client_update_request(
@@ -783,8 +784,10 @@ void mdss_mdp_clk_ctrl(int enable)
 		if (mdata->vsync_ena)
 			mdss_mdp_clk_update(MDSS_CLK_MDP_VSYNC, enable);
 
-		if (!enable)
-			pm_runtime_put(&mdata->pdev->dev);
+		if (!enable) {
+			pm_runtime_mark_last_busy(&mdata->pdev->dev);
+			pm_runtime_put_autosuspend(&mdata->pdev->dev);
+		}
 	}
 
 	mutex_unlock(&mdp_clk_lock);
