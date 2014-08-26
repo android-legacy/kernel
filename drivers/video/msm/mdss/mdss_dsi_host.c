@@ -618,7 +618,12 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	if (ctrl_pdata->status_cmds.link_state == DSI_HS_MODE)
 		mdss_dsi_set_tx_power_mode(1, &ctrl_pdata->panel_data);
 
-	if (ret == 0) {
+	/*
+	 * mdss_dsi_read_status returns the number of bytes returned
+	 * by the panel. Success value is greater than zero and failure
+	 * case returns zero.
+	 */
+	if (ret > 0) {
 		ret = ctrl_pdata->check_read_status(ctrl_pdata);
 	} else {
 		pr_err("%s: Read status register returned error\n", __func__);
@@ -905,7 +910,7 @@ static inline bool __mdss_dsi_cmd_mode_config(
 int mdss_dsi_cmds_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 		struct dsi_cmd_desc *cmds, int cnt)
 {
-	int ret = 0;
+	int len = 0;
 	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
 
 	/*
@@ -938,11 +943,9 @@ int mdss_dsi_cmds_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 do_send:
 	ctrl->cmd_cfg_restore = __mdss_dsi_cmd_mode_config(ctrl, 1);
 
-	ret = mdss_dsi_cmds2buf_tx(ctrl, cmds, cnt);
-	if (IS_ERR_VALUE(ret)) {
+	len = mdss_dsi_cmds2buf_tx(ctrl, cmds, cnt);
+	if (!len)
 		pr_err("%s: failed to call\n", __func__);
-		cnt = -EINVAL;
-	}
 
 	if (!ctrl->do_unicast) {
 		if (mctrl && mctrl->cmd_cfg_restore) {
@@ -956,7 +959,7 @@ do_send:
 		}
 	}
 
-	return cnt;
+	return len;
 }
 
 /* MIPI_DSI_MRPS, Maximum Return Packet Size */
@@ -1385,15 +1388,12 @@ int mdss_dsi_cmdlist_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 {
 	int len;
 
-
 	if (mdss_dsi_sync_wait_enable(ctrl)) {
 		ctrl->do_unicast = false;
 		 if (!ctrl->cmd_sync_wait_trigger &&
 					req->flags & CMD_REQ_UNICAST)
 			ctrl->do_unicast = true;
 	}
-
-	ret = mdss_dsi_cmds_tx(ctrl, req->cmds, req->cmds_cnt);
 
 	len = mdss_dsi_cmds_tx(ctrl, req->cmds, req->cmds_cnt);
 
@@ -1407,7 +1407,7 @@ int mdss_dsi_cmdlist_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 				struct dcs_cmd_req *req)
 {
 	struct dsi_buf *rp;
-	int len = 0, ret = 0;
+	int len = 0;
 
 	if (req->rbuf) {
 		rp = &ctrl->rx_buf;
