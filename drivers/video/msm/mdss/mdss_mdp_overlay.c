@@ -2430,7 +2430,8 @@ static int mdss_mdp_hw_cursor_update(struct msm_fb_data_type *mfd,
 	struct mdss_mdp_mixer *mixer_right = NULL;
 	struct fb_image *img = &cursor->image;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	u32 blendcfg;
+	struct fbcurpos cursor_hot;
+	struct mdss_rect roi;
 	int ret = 0;
 	u32 xres = mfd->fbi->var.xres;
 	u32 yres = mfd->fbi->var.yres;
@@ -2442,7 +2443,7 @@ static int mdss_mdp_hw_cursor_update(struct msm_fb_data_type *mfd,
 			MDSS_MDP_MIXER_MUX_DEFAULT);
 	if (!mixer_left)
 		return -ENODEV;
-	if (mfd->split_display) {
+	if (is_split_lm(mfd)) {
 		mixer_right = mdss_mdp_mixer_get(mdp5_data->ctl,
 				MDSS_MDP_MIXER_MUX_RIGHT);
 		if (!mixer_right)
@@ -2477,11 +2478,7 @@ static int mdss_mdp_hw_cursor_update(struct msm_fb_data_type *mfd,
 		(img->depth != 32) || (start_x >= xres) || (start_y >= yres))
 		return -EINVAL;
 
-	pr_debug("mixer=%d enable=%x set=%x\n", mixer->num, cursor->enable,
-			cursor->set);
-
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
-	blendcfg = mdp_mixer_read(mixer, MDSS_MDP_REG_LM_CURSOR_BLEND_CONFIG);
+	pr_debug("enable=%x set=%x\n", cursor->enable, cursor->set);
 
 	memset(&cursor_hot, 0, sizeof(struct fbcurpos));
 	memset(&roi, 0, sizeof(struct mdss_rect));
@@ -2514,7 +2511,7 @@ static int mdss_mdp_hw_cursor_update(struct msm_fb_data_type *mfd,
 	roi.w = min(xres - start_x, img->width - roi.x);
 	roi.h = min(yres - start_y, img->height - roi.y);
 
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 
 	if (cursor->set & FB_CUR_SETIMAGE) {
 		u32 cursor_addr;
@@ -2538,7 +2535,7 @@ static int mdss_mdp_hw_cursor_update(struct msm_fb_data_type *mfd,
 		}
 		mdss_mdp_hw_cursor_setimage(mixer_left, cursor, cursor_addr,
 				&roi);
-		if (mfd->split_display)
+		if (is_split_lm(mfd))
 			mdss_mdp_hw_cursor_setimage(mixer_right, cursor,
 					cursor_addr, &roi);
 	}
@@ -2575,9 +2572,10 @@ static int mdss_mdp_hw_cursor_update(struct msm_fb_data_type *mfd,
 		mdss_mdp_hw_cursor_blend_config(mixer_right, cursor);
 	}
 
-	mixer->ctl->flush_bits |= BIT(6) << mixer->num;
+	mixer_left->ctl->flush_bits |= BIT(6) << mixer_left->num;
+	if (is_split_lm(mfd))
+		mixer_right->ctl->flush_bits |= BIT(6) << mixer_right->num;
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF);
-
 	return 0;
 }
 
