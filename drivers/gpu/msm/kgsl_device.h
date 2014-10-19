@@ -774,4 +774,5 @@ static inline void kgsl_mutex_unlock(struct mutex *mutex, atomic64_t *owner)
 	atomic64_set(owner, 0);
 	mutex_unlock(mutex);
 }
+
 #endif  /* __KGSL_DEVICE_H */
