@@ -112,6 +112,13 @@ struct eeprom_map_t {
 	uint32_t delay;
 };
 
+struct eeprom_memory_map_t {
+        struct eeprom_map_t page;
+        struct eeprom_map_t pageen;
+        struct eeprom_map_t poll;
+        struct eeprom_map_t mem;
+};
+
 struct eeprom_slave_add_t {
 	uint32_t addr;
 };
