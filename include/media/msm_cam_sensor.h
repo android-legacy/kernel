@@ -237,13 +237,6 @@ struct msm_sensor_id_info_t {
 	uint16_t sensor_id;
 };
 
-struct msm_camera_sensor_slave_info {
-	uint16_t slave_addr;
-	enum msm_camera_i2c_reg_addr_type addr_type;
-	struct msm_sensor_id_info_t sensor_id_info;
-	struct msm_sensor_power_setting_array power_setting_array;
-};
-
 struct msm_camera_i2c_reg_array {
 	uint16_t reg_addr;
 	uint16_t reg_data;
@@ -366,7 +359,7 @@ struct msm_camera_sensor_slave_info {
 	char sensor_name[32];
 	char eeprom_name[32];
 	char actuator_name[32];
-	enum msm_sensor_camera_id_t camera_id;
+//	enum msm_sensor_camera_id_t camera_id;
 	uint16_t slave_addr;
 	enum msm_camera_i2c_reg_addr_type addr_type;
 	struct msm_sensor_id_info_t sensor_id_info;
@@ -569,10 +562,8 @@ enum af_camera_name {
 	ACTUATOR_MAIN_CAM_3,
 	ACTUATOR_MAIN_CAM_4,
 	ACTUATOR_MAIN_CAM_5,
-#if defined(CONFIG_MACH_SONY_FLAMINGO) || defined(CONFIG_MACH_SONY_EAGLE)
-	ACTUATOR_MAIN_CAM_6,
-#endif
-        ACTUATOR_WEB_CAM_0,
+	ACTUATOR_MAIN_CAM_6,/*Guanyi Bug904 QCT 80 header file*/
+	ACTUATOR_WEB_CAM_0,
 	ACTUATOR_WEB_CAM_1,
 	ACTUATOR_WEB_CAM_2,
 };

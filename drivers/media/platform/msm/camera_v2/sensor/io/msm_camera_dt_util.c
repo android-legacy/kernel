@@ -34,11 +34,7 @@ int msm_camera_get_dt_power_setting_data(struct device_node *of_node,
 	uint32_t *array = NULL;
 	struct msm_sensor_power_setting *ps;
 
-	struct msm_sensor_power_setting *power_setting;
-	uint16_t *power_setting_size, size = 0;
-	bool need_reverse = 0;
-
-	if (!power_info)
+	if (!power_setting || !power_setting_size)
 		return -EINVAL;
 
 	count = of_property_count_strings(of_node, "qcom,cam-power-seq-type");
@@ -190,39 +186,6 @@ int msm_camera_get_dt_power_setting_data(struct device_node *of_node,
 			i, ps[i].delay);
 	}
 	kfree(array);
-
-	size = *power_setting_size;
-
-	if (NULL != ps && 0 != size)
-		need_reverse = 1;
-
-	power_info->power_down_setting =
-		kzalloc(sizeof(*ps) * size, GFP_KERNEL);
-
-	if (!power_info->power_down_setting) {
-		pr_err("%s failed %d\n", __func__, __LINE__);
-		rc = -ENOMEM;
-		goto ERROR1;
-	}
-
-	memcpy(power_info->power_down_setting,
-		ps, sizeof(*ps) * size);
-
-	power_info->power_down_setting_size = size;
-
-	if (need_reverse) {
-		int c, end = size - 1;
-		struct msm_sensor_power_setting power_down_setting_t;
-		for (c = 0; c < size/2; c++) {
-			power_down_setting_t =
-				power_info->power_down_setting[c];
-			power_info->power_down_setting[c] =
-				power_info->power_down_setting[end];
-			power_info->power_down_setting[end] =
-				power_down_setting_t;
-			end--;
-		}
-	}
 	return rc;
 
 ERROR2:
@@ -533,7 +496,7 @@ int msm_camera_power_up(struct msm_camera_power_ctrl_t *ctrl,
 		ctrl->gpio_conf->cam_gpio_req_tbl_size, 1);
 	if (rc < 0)
 		no_gpio = rc;
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	gpio_set_value_cansleep(69,1);
 #endif
 	for (index = 0; index < ctrl->power_setting_size; index++) {
@@ -688,7 +651,7 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 		sensor_i2c_client->i2c_func_tbl->i2c_util(
 			sensor_i2c_client, MSM_CCI_RELEASE);
 
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	gpio_set_value_cansleep(69, GPIOF_OUT_INIT_LOW);
 #endif
 	for (index = (ctrl->power_setting_size - 1); index >= 0; index--) {

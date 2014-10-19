@@ -25,7 +25,7 @@
 uint16_t s5k5e2_version = 0;
 int powerup_count = 0;
 #endif
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 #include "eeprom/msm_eeprom.h"
 #endif
 
@@ -742,7 +742,7 @@ static int32_t msm_sensor_get_dt_data(struct device_node *of_node,
 		pr_err("%s failed %d\n", __func__, __LINE__);
 		goto ERROR1;
 	}
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	if(strcmp("imx134",s_ctrl->sensordata->sensor_name)==0) {
 		CDBG("%s:Main camera source no. is : %d\n", __func__,
 			cci_camera_source);
@@ -1172,7 +1172,7 @@ power_up_failed:
 int32_t msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int32_t index = 0;
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	int32_t gpiotestnum = 0;
 #endif
 	struct msm_sensor_power_setting_array *power_setting_array = NULL;
@@ -1208,7 +1208,7 @@ int32_t msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 					SENSOR_GPIO_MAX);
 				continue;
 			}
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 			gpiotestnum = data->gpio_conf->gpio_num_info->gpio_num
 					[power_setting->seq_val];
 			if((gpiotestnum == 69) && (gpio69_count == 2)){
@@ -1219,7 +1219,7 @@ int32_t msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 			gpio_set_value_cansleep(
 				data->gpio_conf->gpio_num_info->gpio_num
 				[power_setting->seq_val], GPIOF_OUT_INIT_LOW);
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 			}
 #endif
 			break;
@@ -1842,7 +1842,7 @@ static struct msm_camera_i2c_fn_t msm_sensor_qup_func_tbl = {
 	.i2c_write_conf_tbl = msm_camera_qup_i2c_write_conf_tbl,
 };
 
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 static ssize_t CheckCameraID_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
   uint16_t rc;
@@ -2023,7 +2023,7 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 	CDBG("%s:%d\n", __func__, __LINE__);
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
   CDBG("[Vince Debug] Pin Function create Function Enter\t%s:%d\n", __func__, __LINE__);
   {
       if(device_create_file(s_ctrl->dev, &dev_attr_CheckCameraID))

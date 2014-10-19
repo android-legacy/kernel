@@ -25,7 +25,7 @@
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
 #endif
 
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 int cci_camera_source = 0;
 #endif
 
@@ -329,7 +329,7 @@ static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 			}
 			memptr += emap[j].mem.valid_size;
 		}
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 		/*Bug1095,guanyi,EEPROM S*/
 		if(j==0){/*After A1 for AWB and AF,A3 A5 A7 for lsc*/
 		eb_info->i2c_slaveaddr=0xA3;
@@ -873,7 +873,7 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 	int j = 0;
 	uint32_t temp;
 
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 /*AF DATA S*/
 	uint16_t infinity_dac_t;
 	uint16_t macro_dac_t;
@@ -999,7 +999,7 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 		     e_ctrl->cal_data.mapdata[j]);
 
 	e_ctrl->is_supported |= msm_eeprom_match_crc(&e_ctrl->cal_data);
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
                 infinity_dac_t=(uint16_t)(e_ctrl->cal_data.mapdata[0xD0] << 8) |
                   e_ctrl->cal_data.mapdata[0xD1];
                 macro_dac_t=(uint16_t)(e_ctrl->cal_data.mapdata[0xD4] << 8) |

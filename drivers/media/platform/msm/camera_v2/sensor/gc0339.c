@@ -27,7 +27,7 @@ DEFINE_MSM_MUTEX(gc0339_mut);
 #define CDBG(fmt, args...) do { } while (0)
 #endif
 static struct msm_sensor_ctrl_t gc0339_s_ctrl;
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 static struct msm_sensor_ctrl_t gc0339_power_on;
 static struct msm_sensor_ctrl_t gc0339_power_off;
 int checksubcam_ID = 0;
@@ -85,7 +85,7 @@ static struct msm_sensor_power_setting gc0339_power_setting[] = {
 	},
 };
 
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 /*[VY52] VinceT, [Bug#171], S, Sub camera Dual power squence*/
 static struct msm_sensor_power_setting gc0339_power_on_setting[] = {
 		{//1.PDN "L"
@@ -224,7 +224,7 @@ int32_t gc0339_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_camera_sensor_board_info *data = s_ctrl->sensordata;
 
 	CDBG("%s:%d\n", __func__, __LINE__);
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	power_setting_array = &gc0339_power_on.power_setting_array;
 #else
 	power_setting_array = &s_ctrl->power_setting_array;
@@ -400,12 +400,12 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_camera_sensor_board_info *data = s_ctrl->sensordata;
 
 	CDBG("%s:%d\n", __func__, __LINE__);
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	power_setting_array = &gc0339_power_off.power_setting_array;
 #else
 	power_setting_array = &s_ctrl->power_setting_array;
 #endif
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
 		s_ctrl->sensor_i2c_client,
 		0xfc,
@@ -415,7 +415,7 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_util(
 			s_ctrl->sensor_i2c_client, MSM_CCI_RELEASE);
 	}
-#ifndef CONFIG_MACH_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
 		s_ctrl->sensor_i2c_client,
 		0xfc,
@@ -428,7 +428,7 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 		CDBG("%s type %d\n", __func__, power_setting->seq_type);
 		switch (power_setting->seq_type) {
 		case SENSOR_CLK:
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 			msm_cam_clk_enable(s_ctrl->dev,
 				&s_ctrl->clk_info[0],
 				(struct clk **)&gc0339_power_on.power_setting_array.power_setting[index+1].data[0],
@@ -450,13 +450,13 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 					SENSOR_GPIO_MAX);
 				continue;
 			}
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 			gpiotestnum = data->gpio_conf->gpio_num_info->gpio_num
 					[power_setting->seq_val];
 #endif
 			if (data->gpio_conf->gpio_num_info->gpio_num
 				[power_setting->seq_val])
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 				{
 				if((gpiotestnum == 69) && (gpio69_count == 2)){
 					pr_err("[VY5X][CTS]Avoid main camera preview fail in CTS\n");
@@ -467,7 +467,7 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 					data->gpio_conf->gpio_num_info->gpio_num
 					[power_setting->seq_val],
 					GPIOF_OUT_INIT_LOW);
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 				}
 
 			}
@@ -480,7 +480,7 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 					SENSOR_GPIO_MAX);
 				continue;
 			}
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 			msm_camera_config_single_vreg(s_ctrl->dev,
 				&data->cam_vreg[power_setting->seq_val],
 				(struct regulator **)&gc0339_power_on.power_setting_array.power_setting[index].data[0],
@@ -516,7 +516,7 @@ int32_t gc0339_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int32_t rc = 0;
 	uint16_t chipid = 0;
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	uint16_t camID_GPIO = 115;
 	int32_t subcamID = 1;
 	int ret1=0;
@@ -532,7 +532,7 @@ int32_t gc0339_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		return rc;
 	}
 
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	if(checksubcam_ID == 0) {
 	if(strcmp("SKUAA_ST_gc0339",s_ctrl->sensordata->sensor_name)==0) {
 		ret1 = gpio_request(camID_GPIO, NULL);
@@ -586,10 +586,10 @@ int32_t gc0339_config(struct msm_sensor_ctrl_t *s_ctrl,
 		for (i = 0; i < SUB_MODULE_MAX; i++)
 			cdata->cfg.sensor_info.subdev_id[i] =
 				s_ctrl->sensordata->sensor_info->subdev_id[i];
-		cdata->cfg.sensor_info.is_mount_angle_valid =
-			s_ctrl->sensordata->sensor_info->is_mount_angle_valid;
-		cdata->cfg.sensor_info.sensor_mount_angle =
-			s_ctrl->sensordata->sensor_info->sensor_mount_angle;
+//		cdata->cfg.sensor_info.is_mount_angle_valid =
+//			s_ctrl->sensordata->sensor_info->is_mount_angle_valid;
+//		cdata->cfg.sensor_info.sensor_mount_angle =
+//			s_ctrl->sensordata->sensor_info->sensor_mount_angle;
 		CDBG("%s:%d sensor name %s\n", __func__, __LINE__,
 			cdata->cfg.sensor_info.sensor_name);
 		CDBG("%s:%d session id %d\n", __func__, __LINE__,
@@ -824,7 +824,7 @@ static struct msm_sensor_ctrl_t gc0339_s_ctrl = {
 	.sensor_v4l2_subdev_info_size = ARRAY_SIZE(gc0339_subdev_info),
 	.func_tbl = &gc0339_sensor_fn_t,
 };
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 static struct msm_sensor_ctrl_t gc0339_power_on =
 {
 	.power_setting_array.power_setting = gc0339_power_on_setting,
