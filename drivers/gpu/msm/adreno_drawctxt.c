@@ -631,7 +631,6 @@ int adreno_context_restore(struct adreno_device *adreno_dev,
 				KGSL_CMD_FLAGS_NONE, cmds, 8);
 }
 
-
 const struct adreno_context_ops adreno_preamble_ctx_ops = {
 	.restore = adreno_context_restore,
 };
