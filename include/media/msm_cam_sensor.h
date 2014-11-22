@@ -249,13 +249,6 @@ enum msm_sensor_camera_id_t {
 	MAX_CAMERAS,
 };
 
-enum cci_i2c_master_t {
-	MASTER_0,
-	MASTER_1,
-	MASTER_MAX,
-};
-
-
 struct msm_camera_i2c_reg_array {
 	uint16_t reg_addr;
 	uint16_t reg_data;
@@ -581,8 +574,10 @@ enum af_camera_name {
 	ACTUATOR_MAIN_CAM_3,
 	ACTUATOR_MAIN_CAM_4,
 	ACTUATOR_MAIN_CAM_5,
-	ACTUATOR_MAIN_CAM_6,/*Guanyi Bug904 QCT 80 header file*/
-	ACTUATOR_WEB_CAM_0,
+#ifdef CONFIG__SONY_EAGLE
+	ACTUATOR_MAIN_CAM_6,
+#endif
+        ACTUATOR_WEB_CAM_0,
 	ACTUATOR_WEB_CAM_1,
 	ACTUATOR_WEB_CAM_2,
 };
