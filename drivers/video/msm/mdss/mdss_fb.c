@@ -52,7 +52,6 @@
 #include <mach/msm_memtypes.h>
 
 #include "mdss_fb.h"
-#include <linux/gpio.h> 
 #include "mdss_mdp_splash_logo.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
@@ -77,7 +76,7 @@ static struct msm_mdp_interface *mdp_instance;
 static int mdss_fb_register(struct msm_fb_data_type *mfd);
 static int mdss_fb_open(struct fb_info *info, int user);
 static int mdss_fb_release(struct fb_info *info, int user);
-static int mdss_fb_release_all(struct fb_info *info, bool release_all);
+static int mdss_fb_release_all(struct fb_info *info, bool release_all,int user);//[VVVV] JackBB 2013/12/05 Fix no free pipe
 static int mdss_fb_pan_display(struct fb_var_screeninfo *var,
 			       struct fb_info *info);
 static int mdss_fb_check_var(struct fb_var_screeninfo *var,
@@ -319,24 +318,6 @@ static ssize_t mdss_mdp_show_blank_event(struct device *dev,
 	return ret;
 }
 
-#ifdef CONFIG_MACH_SONY_FLAMINGO
-/* [Flamingo] Read LCM ID info. for ATS */
-#define LCM_ID_PIN	27
-extern char temp_buf[];		
-static ssize_t mdss_fb_lcm_module_id(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	ssize_t ret = 0;
-
-	if (*temp_buf != '\0')
-		ret = snprintf(buf, PAGE_SIZE, temp_buf);
-	else
-		ret = snprintf(buf, PAGE_SIZE, "TRULY\n");
-
-	return ret;
-}
-#endif
-
 static void __mdss_fb_idle_notify_work(struct work_struct *work)
 {
 	struct delayed_work *dw = to_delayed_work(work);
@@ -396,10 +377,6 @@ static ssize_t mdss_fb_get_idle_notify(struct device *dev,
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO, mdss_fb_get_split, NULL);
 static DEVICE_ATTR(show_blank_event, S_IRUGO, mdss_mdp_show_blank_event, NULL);
-#ifdef CONFIG_MACH_SONY_FLAMINGO
-/*[Flamingo] Read LCM ID for ATS */
-static DEVICE_ATTR(lcm_module_id, S_IRUGO, mdss_fb_lcm_module_id, NULL);
-#endif
 static DEVICE_ATTR(idle_time, S_IRUGO | S_IWUSR | S_IWGRP,
 	mdss_fb_get_idle_time, mdss_fb_set_idle_time);
 static DEVICE_ATTR(idle_notify, S_IRUGO, mdss_fb_get_idle_notify, NULL);
@@ -408,10 +385,6 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_split.attr,
 	&dev_attr_show_blank_event.attr,
-#ifdef CONFIG_MACH_SONY_FLAMINGO
-/*[Flamingo] Read LCM ID for ATS */
-	&dev_attr_lcm_module_id.attr,
-#endif
 	&dev_attr_idle_time.attr,
 	&dev_attr_idle_notify.attr,
 	NULL,
@@ -442,7 +415,7 @@ static void mdss_fb_shutdown(struct platform_device *pdev)
 
 	mfd->shutdown_pending = true;
 	lock_fb_info(mfd->fbi);
-	mdss_fb_release_all(mfd->fbi, true);
+	mdss_fb_release_all(mfd->fbi, true,1);
 	unlock_fb_info(mfd->fbi);
 }
 
@@ -1331,6 +1304,13 @@ static int mdss_fb_open(struct fb_info *info, int user)
 	int result;
 	int pid = current->tgid;
 
+//S [VVVV] JackBB 2013/11/7
+  if(user == 0)
+  {
+    pr_info("mdss_fb_open() user=%d ",user);
+  }
+//E [VVVV] JackBB 2013/11/7
+
 	if (mfd->shutdown_pending) {
 		pr_err("Shutdown pending. Aborting operation\n");
 		return -EPERM;
@@ -1400,7 +1380,7 @@ pm_error:
 	return result;
 }
 
-static int mdss_fb_release_all(struct fb_info *info, bool release_all)
+static int mdss_fb_release_all(struct fb_info *info, bool release_all, int user)//[VVVV] JackBB 2013/12/05 Fix no free pipe
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct mdss_fb_proc_info *pinfo = NULL, *temp_pinfo = NULL;
@@ -1408,6 +1388,13 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 	int pid = current->tgid;
 	bool unknown_pid = true, release_needed = false;
 	struct task_struct *task = current->group_leader;
+
+//S [VVVV] JackBB 2013/11/7
+  if(user == 0)
+  {
+    pr_info("mdss_fb_release() user=%d",user);
+  }
+//E [VVVV] JackBB 2013/11/7
 
 	if (!mfd->ref_cnt) {
 		pr_info("try to close unopened fb %d! from %s\n", mfd->index,
@@ -1460,6 +1447,11 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 			break;
 	}
 
+	if(user == 0)
+	{
+		release_all = true;
+	}
+
 	if (release_needed) {
 		pr_debug("known process %s pid=%d mfd->ref=%d\n",
 			task->comm, pid, mfd->ref_cnt);
@@ -1506,7 +1498,7 @@ static int mdss_fb_release_all(struct fb_info *info, bool release_all)
 
 static int mdss_fb_release(struct fb_info *info, int user)
 {
-	return mdss_fb_release_all(info, false);
+	return mdss_fb_release_all(info, false,user);
 }
 
 static void mdss_fb_power_setting_idle(struct msm_fb_data_type *mfd)
@@ -1874,9 +1866,14 @@ static int __mdss_fb_display_thread(void *data)
 				mfd->index);
 
 	while (1) {
-		wait_event(mfd->commit_wait_q,
+		ret = wait_event_interruptible(mfd->commit_wait_q,
 				(atomic_read(&mfd->commits_pending) ||
 				 kthread_should_stop()));
+
+		if (ret) {
+			pr_info("%s: interrupted", __func__);
+			continue;
+		}
 
 		if (kthread_should_stop())
 			break;

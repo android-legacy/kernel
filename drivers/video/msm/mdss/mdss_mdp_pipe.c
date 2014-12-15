@@ -28,10 +28,6 @@
 
 #define PIPE_HALT_TIMEOUT_US	0x4000
 
-#ifdef CONFIG_MACH_SONY_EAGLE
-extern int g_mdss_dsi_lcd_id;
-#endif
-
 /* following offsets are relative to ctrl register bit offset */
 #define CLK_FORCE_ON_OFFSET	0x0
 #define CLK_FORCE_OFF_OFFSET	0x1
@@ -307,13 +303,7 @@ int mdss_mdp_smp_reserve(struct mdss_mdp_pipe *pipe)
 	if (pipe->mixer->type == MDSS_MDP_MIXER_TYPE_WRITEBACK)
 		wb_mixer = 1;
 
-	/*
-	 * Don't want to allow SMP changes for backend composition pipes
-	 * inorder to preserve SMPs as much as possible.
-	 * On the contrary for non backend composition pipes we should
-	 * allow SMP allocations to prevent composition failures.
-	 */
-	force_alloc = !(pipe->flags & MDP_BACKEND_COMPOSITION);
+	force_alloc = pipe->flags & MDP_SMP_FORCE_ALLOC;
 
 	mutex_lock(&mdss_mdp_smp_lock);
 	for (i = (MAX_PLANES - 1); i >= ps.num_planes; i--) {
@@ -824,6 +814,11 @@ int mdss_mdp_pipe_destroy(struct mdss_mdp_pipe *pipe)
 	return 0;
 }
 
+//S [VVVV] JackBB 2013/8/9
+extern int check_mdss_mdp_mfd_index(struct msm_fb_data_type *mfd);
+extern int g_mdss_dsi_lcd_id;
+//E [VVVV] JackBB 2013/8/9
+
 /**
  * mdss_mdp_pipe_handoff() - Handoff staged pipes during bootup
  * @pipe: pointer to the pipe to be handed-off
@@ -940,9 +935,12 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 	dst_size = (dst.h << 16) | dst.w;
 	dst_xy = (dst.y << 16) | dst.x;
 
-// Screen 180
-#ifdef CONFIG_MACH_SONY_EAGLE
-  if(pipe->mfd && g_mdss_dsi_lcd_id == 0)
+
+//S JackBB 7/29 Screen 180
+#ifndef CONFIG_MACH_SONY_EAGLE
+	dst_xy = (dst.y << 16) | dst.x;
+#else
+  if(pipe->mfd && check_mdss_mdp_mfd_index(pipe->mfd) == 0 && g_mdss_dsi_lcd_id == 0)
   {
     dst_xy = (((960- dst.y - dst.h) << 16) |
     (540- dst.x - dst.w));
@@ -952,6 +950,8 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
     dst_xy = (dst.y << 16) | dst.x;
   }
 #endif
+//E JackBB 7/29 Screen 180
+
 	ystride0 =  (pipe->src_planes.ystride[0]) |
 			(pipe->src_planes.ystride[1] << 16);
 	ystride1 =  (pipe->src_planes.ystride[2]) |
@@ -1014,21 +1014,23 @@ static int mdss_mdp_format_setup(struct mdss_mdp_pipe *pipe)
 	if (pipe->flags & MDP_FLIP_UD)
 		opmode |= MDSS_MDP_OP_FLIP_UD;
 
-// Screen 180
+//S JackBB 7/29 Screen 180
 #ifdef CONFIG_MACH_SONY_EAGLE
-  if(pipe->mfd && g_mdss_dsi_lcd_id == 0)
+  if(pipe->mfd && check_mdss_mdp_mfd_index(pipe->mfd) == 0 && g_mdss_dsi_lcd_id == 0)
   {
     if(opmode & MDSS_MDP_OP_FLIP_LR)
-      opmode &= ~MDSS_MDP_OP_FLIP_LR;
+      opmode &= ~MDSS_MDP_OP_FLIP_LR; 
     else
-      opmode |= MDSS_MDP_OP_FLIP_LR;
+      opmode |= MDSS_MDP_OP_FLIP_LR; 
 
     if(opmode & MDSS_MDP_OP_FLIP_UD)
-      opmode &= ~MDSS_MDP_OP_FLIP_UD;
+      opmode &= ~MDSS_MDP_OP_FLIP_UD; 
     else
-      opmode |= MDSS_MDP_OP_FLIP_UD;
+      opmode |= MDSS_MDP_OP_FLIP_UD; 
   }
 #endif
+//E JackBB 7/29 Screen 180
+
 	pr_debug("pnum=%d format=%d opmode=%x\n", pipe->num, fmt->format,
 			opmode);
 
