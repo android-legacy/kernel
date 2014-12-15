@@ -684,11 +684,8 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	 * Issue hardware reset line after enabling the DSI clocks and data
 	 * data lanes for LP11 init
 	 */
-	if (pdata->panel_info.mipi.lp11_init)
-  {
-    pr_info("pdata->panel_info.mipi.lp11_init == 1");
+	if (mipi->lp11_init)
 		mdss_dsi_panel_reset(pdata, 1);
-  }
 
 	if (mipi->init_delay)
 		usleep(mipi->init_delay);
@@ -1084,10 +1081,6 @@ static struct device_node *mdss_dsi_pref_prim_panel(
  *
  * returns pointer to panel node on success, NULL on error.
  */
-
-#define LCD_ID_GPIO 23
-int g_mdss_dsi_lcd_id = 0;
-
 static struct device_node *mdss_dsi_find_panel_of_node(
 		struct platform_device *pdev, char *panel_cfg)
 {
@@ -1148,40 +1141,40 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 end:
 	dsi_pan_node = mdss_dsi_pref_prim_panel(pdev);
 #else
-  struct device_node *dsi_pan_node = NULL;
-  int status,rc;
-  rc = gpio_request(LCD_ID_GPIO, "disp_lcd_id");
+	struct device_node *dsi_pan_node = NULL;
+	int status,rc;
+	rc = gpio_request(LCD_ID_GPIO, "disp_lcd_id");
 
-  rc = gpio_tlmm_config(GPIO_CFG(
-		  LCD_ID_GPIO,
-		  0,
-		  GPIO_CFG_INPUT,
-		  GPIO_CFG_NO_PULL,//GPIO_CFG_PULL_UP,///*GPIO_CFG_PULL_DOWN,*/
-		  GPIO_CFG_2MA),
-		  GPIO_CFG_ENABLE);
+	rc = gpio_tlmm_config(GPIO_CFG(
+		LCD_ID_GPIO,
+		0,
+		GPIO_CFG_INPUT,
+		GPIO_CFG_NO_PULL,
+		GPIO_CFG_2MA),
+		GPIO_CFG_ENABLE);
 
-  status = gpio_get_value(LCD_ID_GPIO);
-  g_mdss_dsi_lcd_id = status;
-  pr_info("%s: LCD_ID = %d\n", __func__, status);
+	status = gpio_get_value(LCD_ID_GPIO);
+	g_mdss_dsi_lcd_id = status;
+	pr_info("%s: LCD_ID = %d\n", __func__, status);
 
-  if(g_mdss_dsi_lcd_id == 0)
-  {
-	  dsi_pan_node = of_parse_phandle(
-		  pdev->dev.of_node,
-		  "qcom,dsi-pref-prim-pan1", 0);
-  }
-  else
-  {
-	  dsi_pan_node = of_parse_phandle(
-		  pdev->dev.of_node,
-		  "qcom,dsi-pref-prim-pan2", 0);
-  }
+	if(g_mdss_dsi_lcd_id == 0)
+	{
+		dsi_pan_node = of_parse_phandle(
+		pdev->dev.of_node,
+		"qcom,dsi-pref-prim-pan1", 0);
+	}
+	else
+	{
+		dsi_pan_node = of_parse_phandle(
+		pdev->dev.of_node,
+		"qcom,dsi-pref-prim-pan2", 0);
+	}
 
 	if (!dsi_pan_node) {
 		pr_err("%s:can't find panel phandle\n",
-		       __func__);
+			__func__);
 		return NULL;
-  }
+	}
 #endif
 	return dsi_pan_node;
 }
@@ -1522,10 +1515,9 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	ctrl_pdata->disp_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-enable-gpio", 0);
 
-	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
+	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
 		pr_err("%s:%d, Disp_en gpio not specified\n",
 						__func__, __LINE__);
-	}
 
 	if (pinfo->type == MIPI_CMD_PANEL) {
 		ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
