@@ -468,6 +468,7 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 	},
 };
 
+#ifndef CONFIG_SONY_EAGLE
 static struct msm_gpiomux_config msm_blsp_spi_cs_config[] __initdata = {
 	{
 		.gpio      = 2,		/* BLSP1 QUP1 SPI_CS1 */
@@ -477,6 +478,7 @@ static struct msm_gpiomux_config msm_blsp_spi_cs_config[] __initdata = {
 		},
 	},
 };
+#endif
 
 static struct msm_gpiomux_config msm_synaptics_configs[] __initdata = {
 	{
@@ -1099,9 +1101,11 @@ void __init msm8226_init_gpiomux(void)
 	else {
 		msm_gpiomux_install(msm_blsp_configs,
 			ARRAY_SIZE(msm_blsp_configs));
+#ifndef CONFIG_SONY_EAGLE
 		if (machine_is_msm8226())
 			msm_gpiomux_install(msm_blsp_spi_cs_config,
 				ARRAY_SIZE(msm_blsp_spi_cs_config));
+#endif
 	}
 
 	msm_gpiomux_install(wcnss_5wire_interface,
