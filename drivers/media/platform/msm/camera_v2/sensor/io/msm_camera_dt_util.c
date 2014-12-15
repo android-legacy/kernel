@@ -443,6 +443,13 @@ int msm_camera_get_dt_power_setting_data(struct device_node *of_node,
 				ps[i].seq_val = SENSOR_GPIO_STANDBY;
 			else if (!strcmp(seq_name, "sensor_gpio_vdig"))
 				ps[i].seq_val = SENSOR_GPIO_VDIG;
+#ifdef CONFIG_MACH_SONY_FLAMINGO
+// [Flamingo] Modify for Rear camera eeprom
+			else if (!strcmp(seq_name, "sensor_gpio_vio"))
+				ps[i].seq_val = SENSOR_GPIO_VIO;
+			else if (!strcmp(seq_name, "sensor_gpio_vana"))
+				ps[i].seq_val = SENSOR_GPIO_VANA;
+#endif
 			else
 				rc = -EILSEQ;
 			break;
@@ -975,7 +982,9 @@ int msm_camera_power_up(struct msm_camera_power_ctrl_t *ctrl,
 		ctrl->gpio_conf->cam_gpio_req_tbl_size, 1);
 	if (rc < 0)
 		no_gpio = rc;
-	gpio_set_value_cansleep(69,1);/*Bug1095,guanyi,EEPROM*/
+#ifdef CONFIG_MACH_SONY_EAGLE
+	gpio_set_value_cansleep(69,1);
+#endif
 	for (index = 0; index < ctrl->power_setting_size; index++) {
 		CDBG("%s index %d\n", __func__, index);
 		power_setting = &ctrl->power_setting[index];
@@ -1162,12 +1171,11 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 		sensor_i2c_client->i2c_func_tbl->i2c_util(
 			sensor_i2c_client, MSM_CCI_RELEASE);
 
-<<<<<<< HEAD
 	for (index = 0; index < ctrl->power_down_setting_size; index++) {
-=======
-	gpio_set_value_cansleep(69, GPIOF_OUT_INIT_LOW);	/*Bug1095,guanyi,EEPROM*/
-	for (index = (ctrl->power_setting_size - 1); index >= 0; index--) {
->>>>>>> 2e33fc5... import 18.3.A.0.31, 18.3.B.0.31, and 18.3.C.0.37
+#ifdef CONFIG_MACH_SONY_EAGLE
+	gpio_set_value_cansleep(69, GPIOF_OUT_INIT_LOW);
+#endif
+
 		CDBG("%s index %d\n", __func__, index);
 		pd = &ctrl->power_down_setting[index];
 		ps = NULL;
