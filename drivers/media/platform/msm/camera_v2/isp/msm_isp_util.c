@@ -25,9 +25,12 @@
 static DEFINE_MUTEX(bandwidth_mgr_mutex);
 static struct msm_isp_bandwidth_mgr isp_bandwidth_mgr;
 
+<<<<<<< HEAD
 /**/
 //#define MSM_ISP_MIN_AB 300000000
 //#define MSM_ISP_MIN_IB 450000000
+=======
+>>>>>>> AU_LINUX_ANDROID_LNX.LA.3.5.2.2_RB1.04.04.02.087.007
 #define MSM_ISP_MIN_AB 450000000
 #define MSM_ISP_MIN_IB 900000000
 

@@ -13,9 +13,13 @@
 #include <linux/module.h>
 #include <mach/iommu.h>
 #include <linux/ratelimit.h>
+<<<<<<< HEAD
 /**/
 #include <asm/div64.h>
 
+=======
+#include <asm/div64.h>
+>>>>>>> AU_LINUX_ANDROID_LNX.LA.3.5.2.2_RB1.04.04.02.087.007
 #include "msm_isp40.h"
 #include "msm_isp_util.h"
 #include "msm_isp_axi_util.h"
@@ -38,9 +42,12 @@
 #define VFE40_8x26_VERSION 0x20000013
 #define VFE40_8x26V2_VERSION 0x20010014
 
+<<<<<<< HEAD
 /**/
 //#define VFE40_BURST_LEN 3
 //#define VFE40_STATS_BURST_LEN 2
+=======
+>>>>>>> AU_LINUX_ANDROID_LNX.LA.3.5.2.2_RB1.04.04.02.087.007
 #define VFE40_BURST_LEN 1
 #define VFE40_STATS_BURST_LEN 1
 #define VFE40_UB_SIZE 1536
@@ -604,6 +611,7 @@ static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev ,
 	rst_val = msm_vfe40_reset_values[reset_type];
 	init_completion(&vfe_dev->reset_complete);
 	msm_camera_io_w_mb(rst_val, vfe_dev->vfe_base + 0xC);
+<<<<<<< HEAD
 	/*QCT patch 20140627 S delete*/
 //	return wait_for_completion_interruptible_timeout(
 //		&vfe_dev->reset_complete, msecs_to_jiffies(50));
@@ -616,6 +624,10 @@ static long msm_vfe40_reset_hardware(struct vfe_device *vfe_dev ,
 			return 0;
 		}
 	/*QCT patch 20140627 E add*/
+=======
+	return wait_for_completion_timeout(
+		&vfe_dev->reset_complete, msecs_to_jiffies(50));
+>>>>>>> AU_LINUX_ANDROID_LNX.LA.3.5.2.2_RB1.04.04.02.087.007
 }
 
 static void msm_vfe40_axi_reload_wm(
@@ -1100,8 +1112,11 @@ static void msm_vfe40_cfg_axi_ub_equal_default(
 	uint8_t num_used_wms = 0;
 	uint32_t prop_size = 0;
 	uint32_t wm_ub_size;
+<<<<<<< HEAD
 	/**/
 	//uint32_t delta;
+=======
+>>>>>>> AU_LINUX_ANDROID_LNX.LA.3.5.2.2_RB1.04.04.02.087.007
 
 	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
 		if (axi_data->free_wm[i] > 0) {
@@ -1113,6 +1128,7 @@ static void msm_vfe40_cfg_axi_ub_equal_default(
 		axi_data->hw_info->min_wm_ub * num_used_wms;
 	for (i = 0; i < axi_data->hw_info->num_wm; i++) {
 		if (axi_data->free_wm[i]) {
+<<<<<<< HEAD
 		/**/
                        /*
 			delta =
@@ -1126,6 +1142,13 @@ static void msm_vfe40_cfg_axi_ub_equal_default(
             		do_div(temp, total_image_size);
             		delta = temp;
 
+=======
+			uint64_t delta = 0;
+			uint64_t temp = (uint64_t)axi_data->wm_image_size[i] *
+					(uint64_t)prop_size;
+			do_div(temp, total_image_size);
+			delta = temp;
+>>>>>>> AU_LINUX_ANDROID_LNX.LA.3.5.2.2_RB1.04.04.02.087.007
 			wm_ub_size = axi_data->hw_info->min_wm_ub + delta;
 			msm_camera_io_w(ub_offset << 16 | (wm_ub_size - 1),
 				vfe_dev->vfe_base + VFE40_WM_BASE(i) + 0x10);
@@ -1152,9 +1175,13 @@ static void msm_vfe40_cfg_axi_ub_equal_slicing(
 static void msm_vfe40_cfg_axi_ub(struct vfe_device *vfe_dev)
 {
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
+<<<<<<< HEAD
 	/**/
 	//axi_data->wm_ub_cfg_policy = MSM_WM_UB_EQUAL_SLICING;
         axi_data->wm_ub_cfg_policy = MSM_WM_UB_CFG_DEFAULT;
+=======
+	axi_data->wm_ub_cfg_policy = MSM_WM_UB_CFG_DEFAULT;
+>>>>>>> AU_LINUX_ANDROID_LNX.LA.3.5.2.2_RB1.04.04.02.087.007
 	if (axi_data->wm_ub_cfg_policy == MSM_WM_UB_EQUAL_SLICING)
 		msm_vfe40_cfg_axi_ub_equal_slicing(vfe_dev);
 	else
@@ -1494,8 +1521,13 @@ static void msm_vfe40_get_halt_restart_mask(uint32_t *irq0_mask,
 
 /*QCT Patch 20140627 E add*/
 static struct msm_vfe_axi_hardware_info msm_vfe40_axi_hw_info = {
+<<<<<<< HEAD
 	.num_wm = 7, /*QCT Patch 20140626 from 5 to 7*/
 	.num_comp_mask = 3, /*QCT Patch 20140626 from 2 to 3*/
+=======
+	.num_wm = 7,
+	.num_comp_mask = 3,
+>>>>>>> AU_LINUX_ANDROID_LNX.LA.3.5.2.2_RB1.04.04.02.087.007
 	.num_rdi = 3,
 	.num_rdi_master = 3,
 	.min_wm_ub = 64,
