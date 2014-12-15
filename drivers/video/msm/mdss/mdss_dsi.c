@@ -1081,6 +1081,10 @@ static struct device_node *mdss_dsi_pref_prim_panel(
  *
  * returns pointer to panel node on success, NULL on error.
  */
+
+#define LCD_ID_GPIO 23
+int g_mdss_dsi_lcd_id = 0;
+
 static struct device_node *mdss_dsi_find_panel_of_node(
 		struct platform_device *pdev, char *panel_cfg)
 {
