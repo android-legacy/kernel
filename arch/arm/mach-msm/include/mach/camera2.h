@@ -69,8 +69,8 @@ struct msm_camera_power_ctrl_t {
 	struct msm_sensor_power_setting *power_down_setting;
 	uint16_t power_down_setting_size;
 	struct msm_camera_gpio_conf *gpio_conf;
-	int num_vreg;
 	struct camera_vreg_t *cam_vreg;
+	int num_vreg;
 	struct msm_camera_i2c_conf *i2c_conf;
 	struct msm_cam_clk_info *clk_info;
 	uint16_t clk_info_size;
@@ -82,9 +82,6 @@ struct msm_camera_sensor_board_info {
 	const char *actuator_name;
 	struct msm_camera_slave_info *slave_info;
 	struct msm_camera_csi_lane_params *csi_lane_params;
-	struct msm_camera_gpio_conf *gpio_conf;
-	struct camera_vreg_t *cam_vreg;
-	struct msm_camera_i2c_conf *i2c_conf;
 	struct msm_camera_sensor_strobe_flash_data *strobe_flash_data;
 	struct msm_actuator_info *actuator_info;
 	struct msm_sensor_info_t *sensor_info;

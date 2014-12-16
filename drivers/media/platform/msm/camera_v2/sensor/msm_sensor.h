@@ -61,10 +61,6 @@ struct msm_sensor_ctrl_t {
 	struct msm_sensor_packed_cfg_t *cfg_override;
 	struct msm_sd_subdev msm_sd;
 	enum cci_i2c_master_t cci_i2c_master;
-	struct device *dev;
-        struct msm_cam_clk_info *clk_info;
-        uint16_t clk_info_size;
-        bool stop_setting_valid;
 
 	struct msm_camera_i2c_client *sensor_i2c_client;
 	struct v4l2_subdev_info *sensor_v4l2_subdev_info;
