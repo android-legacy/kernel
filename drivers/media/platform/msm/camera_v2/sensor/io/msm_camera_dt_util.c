@@ -1156,6 +1156,10 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 	struct msm_camera_i2c_client *sensor_i2c_client)
 {
 	int index = 0;
+#ifdef CONFIG_MACH_SONY_EAGLE
+        int32_t gpiotestnum = 0;
+#endif
+
 	struct msm_sensor_power_setting *pd = NULL;
 	struct msm_sensor_power_setting *ps;
 
@@ -1206,11 +1210,24 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 			if (!ctrl->gpio_conf->gpio_num_info->valid
 				[pd->seq_val])
 				continue;
+#ifdef CONFIG_MACH_SONY_EAGLE
+                        gpiotestnum = ctrl->gpio_conf->gpio_num_info->gpio_num
+                                        [pd->seq_val];
+                        if((gpiotestnum == 69) && (gpio69_count == 2)){
+                                CDBG("[VY5X][CTS]Avoid sub camera preview fail in CTS\n");
+                        }
+                        else {
+                        gpio_set_value_cansleep(
+                                ctrl->gpio_conf->gpio_num_info->gpio_num
+                                [pd->seq_val], GPIOF_OUT_INIT_LOW);
+                        }
+#else
 			gpio_set_value_cansleep(
 				ctrl->gpio_conf->gpio_num_info->gpio_num
 				[pd->seq_val],
 				ctrl->gpio_conf->gpio_num_info->gpio_num
 				[pd->config_val]);
+#endif
 			break;
 		case SENSOR_VREG:
 			if (pd->seq_val >= CAM_VREG_MAX) {
