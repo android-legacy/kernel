@@ -1659,7 +1659,7 @@ static void get_uv_data(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 
 	mdss_dsi_cmd_mdp_busy(ctrl_pdata);
 	mdss_bus_bandwidth_ctrl(1);
-	mdss_dsi_clk_ctrl(ctrl_pdata, 1);
+	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
 	for (i = 0; i < ctrl_pdata->spec_pdata->uv_read_cmds.cmd_cnt; i++) {
 		if (short_response)
 			mdss_dsi_cmds_rx(ctrl_pdata, cmds, 0);
@@ -1669,7 +1669,7 @@ static void get_uv_data(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 		pos += len;
 		cmds++;
 	}
-	mdss_dsi_clk_ctrl(ctrl_pdata, 0);
+	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
 	mdss_bus_bandwidth_ctrl(0);
 	conv_uv_data(buf, param_type, u_data, v_data);
 }
@@ -2821,6 +2821,7 @@ int mdss_dsi_panel_init(struct device_node *node,
 	int rc = 0;
 	char *path_name = "mdss_dsi_panel";
 	struct device_node *dsi_ctrl_np = NULL;
+	struct platform_device *ctrl_pdev = NULL;
 	bool cont_splash_enabled;
 	bool partial_update_enabled;
 	
@@ -2855,6 +2856,8 @@ int mdss_dsi_panel_init(struct device_node *node,
 		rc = -EPROBE_DEFER;
 		goto error;
 	}
+
+	ctrl_pdev = of_find_device_by_node(dsi_ctrl_np);
 
 	rc = dev_set_drvdata(&virtdev, ctrl_pdata);
 
@@ -2904,7 +2907,11 @@ int mdss_dsi_panel_init(struct device_node *node,
 		gpio_free(lcd_id);
 		goto exit_lcd_id;
 	}
+
+	mdss_dsi_panel_power_detect(ctrl_pdev, 1);
 	spec_pdata->driver_ic = gpio_get_value(lcd_id);
+	mdss_dsi_panel_power_detect(ctrl_pdev, 0);
+
 	pr_info("%s: gpio=%d\n", __func__, spec_pdata->driver_ic);
 	gpio_free(lcd_id);
 exit_lcd_id:
