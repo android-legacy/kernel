@@ -11,17 +11,6 @@
  * GNU General Public License for more details.
  */
 
-&soc {
-
-	led_flash0: qcom,camera-led-flash {
-		cell-index = <0>;
-		compatible = "qcom,camera-led-flash";
-		qcom,flash-type = <1>;
-		qcom,flash-source = <&pm8226_flash0>;
-		qcom,torch-source = <&pm8226_torch>;
-	};
-};
-
 &cci {
 	actuator0: qcom,actuator@18 {
 		cell-index = <6>;

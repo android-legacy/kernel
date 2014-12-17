@@ -1,5 +1,4 @@
 /* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
- * Copyright (c) 2013 Sony Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -653,10 +652,6 @@
 
 	qcom,msm-adsp-sensors {
 		compatible = "qcom,msm-adsp-sensors";
-		qcom,src-id = <11>;
-		qcom,dst-id = <604>;
-		qcom,ab = <32505856>;
-		qcom,ib = <32505856>;
 	};
 
 	qcom,wdt@f9017000 {
@@ -987,19 +982,6 @@
 		qcom,pmic-arb-channel = <0>;
 	};
 
-        i2c_1: i2c@f9924000 { /* BLSP-1 QUP-2 */
-                cell-index = <1>;
-                compatible = "qcom,i2c-qup";
-                reg = <0xf9924000 0x1000>;
-                #address-cells = <1>;
-                #size-cells = <0>;
-                reg-names = "qup_phys_addr";
-                interrupts = <0 96 0>;
-                interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <384000>;
-                qcom,i2c-src-freq = <19200000>;
-        };
-
 	i2c@f9925000 { /* BLSP-1 QUP-3 */
 		cell-index = <2>;
 		compatible = "qcom,i2c-qup";
@@ -1075,7 +1057,7 @@
 			<  300000 1525 >,
 			<  384000 1525 >,
 			<  600000 1525 >,
-			<  787200 1525 >,
+			<  787200 3051 >,
 			<  998400 4066 >,
 			< 1094400 4066 >,
 			< 1190400 4066 >,
@@ -1110,21 +1092,6 @@
 			qcom,ocmem-part-min = <0x20000>;
 		};
 	};
-
-       
-       i2c@f9925000 { /* BLSP-1 QUP-3 */
-       nfc547@28 {
-			compatible = "nxp,pn547";
-			reg = <0x28>;
-			gpios = <&msmgpio 20 0>, <&msmgpio 22 0>;
-			interrupt-parent = <&msmgpio> ;
-			interrupts = <21 0x2>;
-			ven-gpio = <&msmgpio 20 0x00>;
-			irq-gpio = <&msmgpio 21 0x00>;
-			dl-gpio = <&msmgpio 22 0x00>;
-	
-		};
-       };
 
 	qcom,venus@fdce0000 {
 		compatible = "qcom,pil-venus";
@@ -1282,9 +1249,6 @@
 		qcom,bam-consumer-pipe-index = <12>;
 		qcom,bam-producer-pipe-index = <13>;
 		qcom,master-id = <86>;
-		/* 20140124 Mike */
-		status = "disabled";
-		/* 20140124 Mike */
 	};
 
 	qcom,bam_dmux@fc834000 {
@@ -1419,23 +1383,6 @@
 		qcom,irq-is-percpu;
 		interrupts = <1 7 0xf00>;
 	};
-
-	sony,ric_info {
-		compatible = "sony_ric";
-		sony,num-partition = <4>;
-		sony,partition-names = "system", "userdata", "cache", "apps_log";
-		sony,mount_paths = "/system", "/data", "/cache", "/mnt/idd";
-		sony,mount-flags = <0x1 0x6 0x6 0xE>;
-	};
-
-	/* CCI: Mike, add new illumination controller/chip */
-	cci,illumination_led@0 {
-		compatible = "kinet,ktd2024";
-		label = "illumination_led";
-		/* cci,enable_gpio = <62>; */
-		cci,control_gpio = <0>;
-	};
-
 };
 
 &gdsc_venus {
@@ -1581,8 +1528,7 @@
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <1>;
-		//[Bug1121] Jonny_Chan
-		qcom,hw-settle-time = <0xF>;
+		qcom,hw-settle-time = <2>;
 		qcom,fast-avg-setup = <3>;
 		qcom,btm-channel-number = <0x48>;
 		qcom,meas-interval-timer-idx = <2>;
