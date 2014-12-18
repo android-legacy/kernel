@@ -530,6 +530,13 @@ int adreno_drawctxt_detach(struct kgsl_context *context)
 		mutex_unlock(&drawctxt->mutex);
 
 		/*
+		 * If the context is deteached while we are waiting for
+		 * the next command in GFT SKIP CMD, print the context
+		 * detached status here.
+		 */
+		adreno_fault_skipcmd_detached(device, drawctxt, cmdbatch);
+
+		/*
 		 * Don't hold the drawctxt mutex while the cmdbatch is being
 		 * destroyed because the cmdbatch destroy takes the device
 		 * mutex and the world falls in on itself
@@ -607,7 +614,7 @@ int adreno_context_restore(struct adreno_device *adreno_dev,
 				  struct adreno_context *context)
 {
 	struct kgsl_device *device;
-	unsigned int cmds[8];  
+	unsigned int cmds[8];
 
 	if (adreno_dev == NULL || context == NULL)
 		return -EINVAL;
@@ -621,7 +628,6 @@ int adreno_context_restore(struct adreno_device *adreno_dev,
 	cmds[3] = device->memstore.gpuaddr +
 		KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL, current_context);
 	cmds[4] = context->base.id;
-
 	/* Flush the UCHE for new context */
 	cmds[5] = cp_type0_packet(
 		adreno_getreg(adreno_dev, ADRENO_REG_UCHE_INVALIDATE0), 2);
@@ -630,9 +636,7 @@ int adreno_context_restore(struct adreno_device *adreno_dev,
 		cmds[7] = 0x90000000;
 	return adreno_ringbuffer_issuecmds(device, context,
 				KGSL_CMD_FLAGS_NONE, cmds, 8);
-
 }
-
 
 const struct adreno_context_ops adreno_preamble_ctx_ops = {
 	.restore = adreno_context_restore,

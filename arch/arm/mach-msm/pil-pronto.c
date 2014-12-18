@@ -72,6 +72,9 @@
 
 #define PRONTO_PMU_CCPU_BOOT_REMAP_ADDR			0x2004
 
+#define PRONTO_PMU_SPARE				0x1088
+#define PRONTO_PMU_SPARE_SSR_BIT			BIT(23)
+
 #define CLK_CTL_WCNSS_RESTART_BIT			BIT(0)
 
 #define AXI_HALTREQ					0x0
@@ -95,9 +98,9 @@ struct pronto_data {
 	bool crash;
 	struct delayed_work cancel_vote_work;
 	struct ramdump_device *ramdump_dev;
-        struct work_struct wcnss_wdog_bite_work;
 //S [VY52/VY55][bug_1807] Frank_Chan add
 	struct delayed_work subsys_crash_work;
+        struct work_struct wcnss_wdog_bite_work;
 //E [VY52/VY55][bug_1807] Frank_Chan add
 };
 
@@ -563,7 +566,15 @@ static int wcnss_powerup(const struct subsys_desc *subsys)
 	struct pronto_data *drv = subsys_to_drv(subsys);
 	struct platform_device *pdev = wcnss_get_platform_device();
 	struct wcnss_wlan_config *pwlanconfig = wcnss_get_wlan_config();
-	int    ret = -1;
+	void __iomem *base = drv->base;
+	u32 reg;
+	int ret = -1;
+
+	if (base) {
+		reg = readl_relaxed(base + PRONTO_PMU_SPARE);
+		reg |= PRONTO_PMU_SPARE_SSR_BIT;
+		writel_relaxed(reg, base + PRONTO_PMU_SPARE);
+	}
 
 	if (pdev && pwlanconfig)
 		ret = wcnss_wlan_power(&pdev->dev, pwlanconfig,

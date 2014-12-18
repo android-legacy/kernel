@@ -1767,6 +1767,7 @@ struct mass_storage_function_config {
 	struct fsg_common *common;
 };
 
+#define MAX_LUN_NAME 8
 static int mass_storage_function_init(struct android_usb_function *f,
 					struct usb_composite_dev *cdev)
 {
@@ -1774,65 +1775,45 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	struct mass_storage_function_config *config;
 	struct fsg_common *common;
 	int err;
-	int i;
-	const char *name[3];
-#ifdef F_CDROM 
-	int nluns; 
-#endif
+	int i, n;
+	char name[FSG_MAX_LUNS][MAX_LUN_NAME];
+	u8 uicc_nluns = dev->pdata ? dev->pdata->uicc_nluns : 0;
+
 	config = kzalloc(sizeof(struct mass_storage_function_config),
 								GFP_KERNEL);
 	if (!config)
 		return -ENOMEM;
 
 	config->fsg.nluns = 1;
-	name[0] = "lun";
+	snprintf(name[0], MAX_LUN_NAME, "lun");
+	config->fsg.luns[0].removable = 1;
+
 	if (dev->pdata && dev->pdata->cdrom) {
 		config->fsg.luns[config->fsg.nluns].cdrom = 1;
 		config->fsg.luns[config->fsg.nluns].ro = 1;
 		config->fsg.luns[config->fsg.nluns].removable = 0;
-		name[config->fsg.nluns] = "lun0";
+		snprintf(name[config->fsg.nluns], MAX_LUN_NAME, "lun0");
 		config->fsg.nluns++;
 	}
 	if (dev->pdata && dev->pdata->internal_ums) {
 		config->fsg.luns[config->fsg.nluns].cdrom = 0;
 		config->fsg.luns[config->fsg.nluns].ro = 0;
 		config->fsg.luns[config->fsg.nluns].removable = 1;
-		name[config->fsg.nluns] = "lun1";
+		snprintf(name[config->fsg.nluns], MAX_LUN_NAME, "lun1");
 		config->fsg.nluns++;
 	}
 
-#ifdef F_CDROM
-	if (config->fsg.nluns > FSG_MAX_LUNS)
-		config->fsg.nluns = FSG_MAX_LUNS;
-
-	config->fsg.cdrom_nluns = 1;
-	if (config->fsg.cdrom_nluns > FSG_MAX_LUNS - config->fsg.nluns)
-		config->fsg.cdrom_nluns = FSG_MAX_LUNS - config->fsg.nluns;
-
-	nluns = config->fsg.nluns + config->fsg.cdrom_nluns;
-	if (nluns <= 0) {
-		kfree(config);
-		return -EINVAL;
+	if (uicc_nluns > FSG_MAX_LUNS - config->fsg.nluns) {
+		uicc_nluns = FSG_MAX_LUNS - config->fsg.nluns;
+		pr_debug("limiting uicc luns to %d\n", uicc_nluns);
 	}
-	for (i = 0; i < nluns; i++) {
-		config->fsg.luns[i].removable = 1;
-		if (i < config->fsg.nluns) {
-			/* Mass storage lun */
-			config->fsg.luns[i].ro = 0;
-			config->fsg.luns[i].cdrom = 0;
-		} else {
-			/* CD-ROM lun */
-			config->fsg.luns[i].ro = 1;
-			config->fsg.luns[i].cdrom = 1;
-		}
-	}
-	config->fsg.can_stall = dev->pdata->can_stall;
 
-	config->fsg.vendor_name = "SONY";//MTD-CONN-EH-WHQL-01+
-	config->fsg.product_name = "Mass storage";//MTD-CONN-EH-WHQL-01+
-#else
-	config->fsg.luns[0].removable = 1;
-#endif
+	for (i = 0; i < uicc_nluns; i++) {
+		n = config->fsg.nluns;
+		snprintf(name[n], MAX_LUN_NAME, "uicc%d", i);
+		config->fsg.luns[n].removable = 1;
+		config->fsg.nluns++;
+	}
 
 	common = fsg_common_init(NULL, cdev, &config->fsg);
 	if (IS_ERR(common)) {
@@ -2920,6 +2901,8 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	struct android_configuration	*conf;
 	int value = -EOPNOTSUPP;
 	unsigned long flags;
+	bool do_work = false;
+	bool prev_configured = false;
 
 	req->zero = 0;
 	req->complete = composite_setup_complete;
@@ -2938,6 +2921,12 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 			}
 		}
 
+	/*
+	 * skip the  work when 2nd set config arrives
+	 * with same value from the host.
+	 */
+	if (cdev->config)
+		prev_configured = true;
 	/* Special case the accessory function.
 	 * It needs to handle control requests before it is enabled.
 	 */
@@ -2950,13 +2939,15 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (!dev->connected) {
 		dev->connected = 1;
-		schedule_work(&dev->work);
+		do_work = true;
 	} else if (c->bRequest == USB_REQ_SET_CONFIGURATION &&
 						cdev->config) {
-		schedule_work(&dev->work);
+		if (!prev_configured)
+			do_work = true;
 	}
 	spin_unlock_irqrestore(&cdev->lock, flags);
-
+	if (do_work)
+		schedule_work(&dev->work);
 	return value;
 }
 
@@ -3184,6 +3175,10 @@ static int __devinit android_probe(struct platform_device *pdev)
 		}
 
 		pdata->streaming_func_count = len;
+
+		ret = of_property_read_u32(pdev->dev.of_node,
+				"qcom,android-usb-uicc-nluns",
+				&pdata->uicc_nluns);
 	} else {
 		pdata = pdev->dev.platform_data;
 	}

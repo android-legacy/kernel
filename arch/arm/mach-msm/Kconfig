@@ -339,7 +339,6 @@ config ARCH_FSM9900
 	select MSM_GPIOMUX
 	select MULTI_IRQ_HANDLER
 	select PM_DEVFREQ
-	select MSM_DEVFREQ_CPUBW
 	select MSM_PIL
 	select MSM_NATIVE_RESTART
 	select MSM_RESTART_V2
@@ -3002,6 +3001,13 @@ config MSM_UARTDM_Core_v14
 	depends on SERIAL_MSM_HS
 	help
 		Select if BLSP based UART Core v.14 or higher is present.
+
+config MSM_COMMON_LOG
+	bool "Use to export symbols for parsing memory dump"
+	help
+	 Use this to export symbols to a memory dump table. This table
+	 can be used by post analysis tools to extract information from
+	 memory when device crashes.
 
 config MSM_BOOT_STATS
 	bool "Use MSM boot stats reporting"

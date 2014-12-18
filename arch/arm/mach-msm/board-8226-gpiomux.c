@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -56,6 +56,42 @@ static struct msm_gpiomux_config msm_hsic_configs[] = {
 	},
 };
 #endif
+
+static struct gpiomux_setting smsc_hub_act_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_8MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct gpiomux_setting smsc_hub_susp_cfg = {
+	.func = GPIOMUX_FUNC_GPIO,
+	.drv = GPIOMUX_DRV_2MA,
+	.pull = GPIOMUX_PULL_NONE,
+};
+
+static struct msm_gpiomux_config smsc_hub_configs[] = {
+	{
+		.gpio = 114, /* reset_n */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &smsc_hub_act_cfg,
+			[GPIOMUX_SUSPENDED] = &smsc_hub_susp_cfg,
+		},
+	},
+	{
+		.gpio = 8, /* clk_en */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &smsc_hub_act_cfg,
+			[GPIOMUX_SUSPENDED] = &smsc_hub_susp_cfg,
+		},
+	},
+	{
+		.gpio = 9, /* int_n */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &smsc_hub_act_cfg,
+			[GPIOMUX_SUSPENDED] = &smsc_hub_susp_cfg,
+		},
+	},
+};
 
 #define KS8851_IRQ_GPIO 115
 
@@ -359,13 +395,6 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 		},
 	},
 	{
-		.gpio      = 2,		/* BLSP1 QUP1 SPI_CS1 */
-		.settings = {
-			[GPIOMUX_ACTIVE] = &gpio_spi_cs_act_config,
-			[GPIOMUX_SUSPENDED] = &gpio_spi_susp_config,
-		},
-	},
-	{
 		.gpio      = 3,		/* BLSP1 QUP1 SPI_CLK */
 		.settings = {
 			[GPIOMUX_ACTIVE] = &gpio_spi_act_config,
@@ -439,6 +468,18 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 	},
 };
 
+#ifndef CONFIG_SONY_EAGLE
+static struct msm_gpiomux_config msm_blsp_spi_cs_config[] __initdata = {
+	{
+		.gpio      = 2,		/* BLSP1 QUP1 SPI_CS1 */
+		.settings = {
+			[GPIOMUX_ACTIVE] = &gpio_spi_cs_act_config,
+			[GPIOMUX_SUSPENDED] = &gpio_spi_susp_config,
+		},
+	},
+};
+#endif
+
 static struct msm_gpiomux_config msm_synaptics_configs[] __initdata = {
 	{
 		.gpio = 16,
@@ -456,11 +497,13 @@ static struct msm_gpiomux_config msm_synaptics_configs[] __initdata = {
 	},
 };
 
+#ifndef CONFIG_SONY_EAGLE
 static struct gpiomux_setting gpio_nc_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
 	.pull = GPIOMUX_PULL_NONE,
 };
+#endif
 
 static struct gpiomux_setting goodix_ldo_en_act_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
@@ -498,6 +541,7 @@ static struct gpiomux_setting goodix_reset_sus_cfg = {
 	.pull = GPIOMUX_PULL_DOWN,
 };
 
+#ifndef CONFIG_SONY_EAGLE
 static struct msm_gpiomux_config msm_skuf_blsp_configs[] __initdata = {
 	{
 		.gpio      = 2,		/* NC */
@@ -524,6 +568,7 @@ static struct msm_gpiomux_config msm_skuf_blsp_configs[] __initdata = {
 		},
 	},
 };
+#endif
 
 static struct msm_gpiomux_config msm_skuf_goodix_configs[] __initdata = {
 	{
@@ -1054,12 +1099,20 @@ void __init msm8226_init_gpiomux(void)
 	msm_gpiomux_install(msm_keypad_configs,
 			ARRAY_SIZE(msm_keypad_configs));
 
+#ifndef CONFIG_SONY_EAGLE
 	if (of_board_is_skuf())
 		msm_gpiomux_install(msm_skuf_blsp_configs,
 			ARRAY_SIZE(msm_skuf_blsp_configs));
-	else
+	else {
+#endif
 		msm_gpiomux_install(msm_blsp_configs,
 			ARRAY_SIZE(msm_blsp_configs));
+#ifndef CONFIG_SONY_EAGLE
+		if (machine_is_msm8226())
+			msm_gpiomux_install(msm_blsp_spi_cs_config,
+				ARRAY_SIZE(msm_blsp_spi_cs_config));
+	}
+#endif
 
 	msm_gpiomux_install(wcnss_5wire_interface,
 				ARRAY_SIZE(wcnss_5wire_interface));
@@ -1121,6 +1174,9 @@ void __init msm8226_init_gpiomux(void)
 	}
 	msm_gpiomux_install(msm_hsic_configs, ARRAY_SIZE(msm_hsic_configs));
 #endif
+	if (machine_is_msm8926() && of_board_is_mtp())
+		msm_gpiomux_install(smsc_hub_configs,
+			ARRAY_SIZE(smsc_hub_configs));
 }
 
 static void wcnss_switch_to_gpio(void)
