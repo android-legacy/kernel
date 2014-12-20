@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -37,12 +37,6 @@ enum msm_bus_perf_setting {
 	S_EXIT
 };
 
-enum cci_i2c_master_t {
-	MASTER_0,
-	MASTER_1,
-	MASTER_MAX,
-};
-
 struct msm_camera_slave_info {
 	uint16_t sensor_slave_addr;
 	uint16_t sensor_id_reg_addr;
@@ -70,8 +64,6 @@ struct v4l2_subdev_info {
 
 struct msm_camera_sensor_board_info {
 	const char *sensor_name;
-	const char *eeprom_name;
-	const char *actuator_name;
 	struct msm_camera_slave_info *slave_info;
 	struct msm_camera_csi_lane_params *csi_lane_params;
 	struct camera_vreg_t *cam_vreg;
