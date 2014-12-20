@@ -120,12 +120,6 @@ static int eeprom_config_read_cal_data(struct msm_eeprom_ctrl_t *e_ctrl,
 		e_ctrl->cal_data.mapdata,
 		cdata->cfg.read_data.num_bytes);
 
-	/* should only be called once.  free kernel resource */
-	if (!rc) {
-		kfree(e_ctrl->cal_data.mapdata);
-		kfree(e_ctrl->cal_data.map);
-		memset(&e_ctrl->cal_data, 0, sizeof(e_ctrl->cal_data));
-	}
 	return rc;
 }
 
@@ -269,13 +263,23 @@ static int read_eeprom_memory(struct msm_eeprom_ctrl_t *e_ctrl,
 	int j;
 	struct msm_eeprom_memory_map_t *emap = block->map;
 	uint8_t *memptr = block->mapdata;
+	struct msm_eeprom_board_info *eb_info = NULL;
 
 	if (!e_ctrl) {
 		pr_err("%s e_ctrl is NULL", __func__);
 		return -EINVAL;
 	}
 
+	eb_info = e_ctrl->eboard_info;
 	for (j = 0; j < block->num_map; j++) {
+		if (emap[j].saddr.addr) {
+			eb_info->i2c_slaveaddr = emap[j].saddr.addr;
+			e_ctrl->i2c_client.cci_client->sid =
+					eb_info->i2c_slaveaddr >> 1;
+			pr_err("qcom,slave-addr = 0x%X\n",
+				eb_info->i2c_slaveaddr);
+		}
+
 		if (emap[j].page.valid_size) {
 			e_ctrl->i2c_client.addr_type = emap[j].page.addr_t;
 			rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_write(
@@ -389,6 +393,12 @@ static int msm_eeprom_parse_memory_map(struct device_node *of,
 			pr_err("%s failed %d\n", __func__, __LINE__);
 			goto ERROR;
 		}
+
+		snprintf(property, PROPERTY_MAXSIZE, "qcom,saddr%d", i);
+		rc = of_property_read_u32_array(of, property,
+			(uint32_t *) &map[i].saddr.addr, 1);
+		if (rc < 0)
+			CDBG("%s: saddr not needed - block %d\n", __func__, i);
 
 		snprintf(property, PROPERTY_MAXSIZE, "qcom,mem%d", i);
 		rc = of_property_read_u32_array(of, property,
@@ -597,7 +607,7 @@ static int msm_eeprom_get_dt_data(struct msm_eeprom_ctrl_t *e_ctrl)
 
 	rc = msm_camera_get_dt_power_setting_data(of_node,
 		power_info->cam_vreg, power_info->num_vreg,
-		&power_info->power_setting, &power_info->power_setting_size);
+		power_info);
 	if (rc < 0)
 		goto ERROR1;
 
