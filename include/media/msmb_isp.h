@@ -242,9 +242,11 @@ enum msm_vfe_reg_cfg_type {
 	VFE_READ_DMI_64BIT,
 	GET_SOC_HW_VER,
 	GET_MAX_CLK_RATE,
+#ifndef CONFIG_SONY_EAGLE
 	VFE_HW_UPDATE_LOCK,
 	VFE_HW_UPDATE_UNLOCK,
 	SET_WM_UB_SIZE,
+#endif
 };
 
 struct msm_vfe_cfg_cmd2 {
@@ -434,5 +436,4 @@ struct msm_isp_event_data {
 
 #define VIDIOC_MSM_ISP_UPDATE_STREAM \
 	_IOWR('V', BASE_VIDIOC_PRIVATE+13, struct msm_vfe_axi_stream_update_cmd)
-
 #endif /* __MSMB_ISP__ */
