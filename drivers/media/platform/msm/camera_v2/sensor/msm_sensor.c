@@ -428,9 +428,7 @@ int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 #ifdef CONFIG_SONY_EAGLE
         int32_t gpiotestnum = 0;
         struct msm_sensor_power_setting *power_setting = NULL;
-        struct msm_camera_sensor_board_info *data = s_ctrl->sensordata;
-        struct msm_camera_power_ctrl_t *power_info = &data->power_info;
-        struct msm_camera_gpio_conf *gpio_conf = power_info->gpio_conf;
+	struct msm_camera_gpio_conf *gpio_conf = NULL;
 #endif
 
 	if (!s_ctrl) {
