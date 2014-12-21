@@ -425,6 +425,14 @@ int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	enum msm_camera_device_type_t sensor_device_type;
 	struct msm_camera_i2c_client *sensor_i2c_client;
 
+#ifdef CONFIG_SONY_EAGLE
+        int32_t gpiotestnum = 0;
+        struct msm_sensor_power_setting *power_setting = NULL;
+        struct msm_camera_sensor_board_info *data = s_ctrl->sensordata;
+        struct msm_camera_power_ctrl_t *power_info = &data->power_info;
+        struct msm_camera_gpio_conf *gpio_conf = power_info->gpio_conf;
+#endif
+
 	if (!s_ctrl) {
 		pr_err("%s:%d failed: s_ctrl %p\n",
 			__func__, __LINE__, s_ctrl);
@@ -434,6 +442,14 @@ int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	power_info = &s_ctrl->sensordata->power_info;
 	sensor_device_type = s_ctrl->sensor_device_type;
 	sensor_i2c_client = s_ctrl->sensor_i2c_client;
+
+#ifdef CONFIG_SONY_EAGLE
+                        gpiotestnum = gpio_conf->gpio_num_info->gpio_num
+                                        [power_setting->seq_val];
+                        if((gpiotestnum == 69) && (gpio69_count == 2)){
+                                CDBG("[VY5X][CTS]Avoid sub camera preview fail in CTS\n");
+                        }
+#endif
 
 	if (!power_info || !sensor_i2c_client) {
 		pr_err("%s:%d failed: power_info %p sensor_i2c_client %p\n",
@@ -485,13 +501,6 @@ int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 
 int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 {
-#ifdef CONFIG_SONY_EAGLE
-	int32_t gpiotestnum = 0;
-	struct msm_sensor_power_setting *power_setting = NULL;
-        struct msm_camera_sensor_board_info *data = s_ctrl->sensordata;
-        struct msm_camera_power_ctrl_t *power_info = &data->power_info;
-        struct msm_camera_gpio_conf *gpio_conf = power_info->gpio_conf;
-#endif
 	int rc = 0;
 	uint16_t chipid = 0;
 	struct msm_camera_i2c_client *sensor_i2c_client;
@@ -507,13 +516,6 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 	slave_info = s_ctrl->sensordata->slave_info;
 	sensor_name = s_ctrl->sensordata->sensor_name;
 
-#ifdef CONFIG_SONY_EAGLE
-			gpiotestnum = gpio_conf->gpio_num_info->gpio_num
-					[power_setting->seq_val];
-			if((gpiotestnum == 69) && (gpio69_count == 2)){
-				CDBG("[VY5X][CTS]Avoid sub camera preview fail in CTS\n");
-			}
-#endif
 	if (!sensor_i2c_client || !slave_info || !sensor_name) {
 		pr_err("%s:%d failed: %p %p %p\n",
 			__func__, __LINE__, sensor_i2c_client, slave_info,
