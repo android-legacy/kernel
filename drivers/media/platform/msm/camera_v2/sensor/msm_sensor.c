@@ -488,7 +488,9 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 #ifdef CONFIG_SONY_EAGLE
 	int32_t gpiotestnum = 0;
 	struct msm_sensor_power_setting *power_setting = NULL;
-	struct msm_camera_sensor_board_info *sensordata = NULL;
+        struct msm_camera_sensor_board_info *data = s_ctrl->sensordata;
+        struct msm_camera_power_ctrl_t *power_info = &data->power_info;
+        struct msm_camera_gpio_conf *gpio_conf = power_info->gpio_conf;
 #endif
 	int rc = 0;
 	uint16_t chipid = 0;
@@ -506,7 +508,7 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 	sensor_name = s_ctrl->sensordata->sensor_name;
 
 #ifdef CONFIG_SONY_EAGLE
-			gpiotestnum = sensordata->power_info.gpio_conf->gpio_num_info->gpio_num
+			gpiotestnum = gpio_conf->gpio_num_info->gpio_num
 					[power_setting->seq_val];
 			if((gpiotestnum == 69) && (gpio69_count == 2)){
 				CDBG("[VY5X][CTS]Avoid sub camera preview fail in CTS\n");
