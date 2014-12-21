@@ -40,14 +40,23 @@
 #define MAX_ACTUATOR_REGION 5
 #define MAX_ACTUATOR_INIT_SET 12
 #define MAX_ACTUATOR_REG_TBL_SIZE 8
+#define MAX_ACTUATOR_AF_TOTAL_STEPS 1024
 
 #define MOVE_NEAR 0
 #define MOVE_FAR  1
+
+#define MSM_ACTUATOR_MOVE_SIGNED_FAR -1
+#define MSM_ACTUATOR_MOVE_SIGNED_NEAR  1
 
 #define MAX_EEPROM_NAME 32
 
 #define MAX_AF_ITERATIONS 3
 #define MAX_NUMBER_OF_STEPS 47
+
+typedef enum sensor_stats_type {
+	YRGB,
+	YYYY,
+} sensor_stats_type_t;
 
 enum flash_type {
 	LED_FLASH = 1,
@@ -340,7 +349,8 @@ enum camb_position_t {
 
 enum camerab_mode_t {
 	CAMERA_MODE_2D_B = (1<<0),
-	CAMERA_MODE_3D_B = (1<<1)
+	CAMERA_MODE_3D_B = (1<<1),
+	CAMERA_MODE_INVALID = (1<<2),
 };
 
 struct msm_sensor_init_params {
@@ -350,6 +360,19 @@ struct msm_sensor_init_params {
 	enum camb_position_t position;
 	/* sensor mount angle */
 	uint32_t            sensor_mount_angle;
+};
+
+struct msm_camera_sensor_slave_info {
+	char sensor_name[32];
+	char eeprom_name[32];
+	char actuator_name[32];
+	enum msm_sensor_camera_id_t camera_id;
+	uint16_t slave_addr;
+	enum msm_camera_i2c_reg_addr_type addr_type;
+	struct msm_sensor_id_info_t sensor_id_info;
+	struct msm_sensor_power_setting_array power_setting_array;
+	uint8_t  is_init_params_valid;
+	struct msm_sensor_init_params sensor_init_params;
 };
 
 struct sensorb_cfg_data {
@@ -441,8 +464,10 @@ enum msm_actuator_cfg_type_t {
 	CFG_GET_ACTUATOR_INFO,
 	CFG_SET_ACTUATOR_INFO,
 	CFG_SET_DEFAULT_FOCUS,
-	CFG_SET_POSITION,
 	CFG_MOVE_FOCUS,
+	CFG_SET_POSITION,
+	CFG_ACTUATOR_POWERDOWN,
+	CFG_ACTUATOR_POWERUP,
 };
 
 enum actuator_type {
@@ -460,9 +485,18 @@ enum msm_actuator_addr_type {
 	MSM_ACTUATOR_WORD_ADDR,
 };
 
+enum msm_actuator_i2c_operation {
+	MSM_ACT_WRITE = 0,
+	MSM_ACT_POLL,
+};
+
 struct reg_settings_t {
 	uint16_t reg_addr;
+	enum msm_actuator_addr_type addr_type;
 	uint16_t reg_data;
+	enum msm_actuator_data_type data_type;
+	enum msm_actuator_i2c_operation i2c_operation;
+	uint32_t delay;
 };
 
 struct region_params_t {
@@ -596,10 +630,10 @@ struct msm_camera_led_cfg_t {
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 3, uint32_t)
 
 #define VIDIOC_MSM_CSIPHY_IO_CFG \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 4, struct csid_cfg_data)
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 4, struct csiphy_cfg_data)
 
 #define VIDIOC_MSM_CSID_IO_CFG \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 5, struct csiphy_cfg_data)
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 5, struct csid_cfg_data)
 
 #define VIDIOC_MSM_ACTUATOR_CFG \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 6, struct msm_actuator_cfg_data)

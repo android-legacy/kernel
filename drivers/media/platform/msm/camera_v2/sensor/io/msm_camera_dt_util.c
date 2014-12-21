@@ -179,6 +179,39 @@ int msm_camera_get_dt_power_setting_data(struct device_node *of_node,
 			i, ps[i].delay);
 	}
 	kfree(array);
+
+	size = *power_setting_size;
+
+	if (NULL != ps && 0 != size)
+		need_reverse = 1;
+
+	power_info->power_down_setting =
+		kzalloc(sizeof(*ps) * size, GFP_KERNEL);
+
+	if (!power_info->power_down_setting) {
+		pr_err("%s failed %d\n", __func__, __LINE__);
+		rc = -ENOMEM;
+		goto ERROR1;
+	}
+
+	memcpy(power_info->power_down_setting,
+		ps, sizeof(*ps) * size);
+
+	power_info->power_down_setting_size = size;
+
+	if (need_reverse) {
+		int c, end = size - 1;
+		struct msm_sensor_power_setting power_down_setting_t;
+		for (c = 0; c < size/2; c++) {
+			power_down_setting_t =
+				power_info->power_down_setting[c];
+			power_info->power_down_setting[c] =
+				power_info->power_down_setting[end];
+			power_info->power_down_setting[end] =
+				power_down_setting_t;
+			end--;
+		}
+	}
 	return rc;
 
 ERROR2:
@@ -579,11 +612,6 @@ int msm_camera_power_up(struct msm_camera_power_ctrl_t *ctrl,
 	return 0;
 power_up_failed:
 	pr_err("%s:%d failed\n", __func__, __LINE__);
-	if (device_type == MSM_CAMERA_PLATFORM_DEVICE) {
-		sensor_i2c_client->i2c_func_tbl->i2c_util(
-			sensor_i2c_client, MSM_CCI_RELEASE);
-	}
-
 	for (index--; index >= 0; index--) {
 		CDBG("%s index %d\n", __func__, index);
 		power_setting = &ctrl->power_setting[index];
