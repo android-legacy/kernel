@@ -1191,7 +1191,7 @@ static ssize_t CheckCameraID_show(struct device *dev, struct device_attribute *a
 
   if(s_ctrl)
   {
-      //CDBG("[Vince Debug] s_ctrl get -start power up %s:%d \n", __func__, __LINE__);
+      CDBG("[Vince Debug] s_ctrl get -start power up %s:%d \n", __func__, __LINE__);
       rc= s_ctrl->func_tbl->sensor_power_up(s_ctrl);
       if (rc < 0)
       {
@@ -1200,7 +1200,7 @@ static ssize_t CheckCameraID_show(struct device *dev, struct device_attribute *a
           pr_err("[Vince Debug] power up fail %s:%d \n", __func__, __LINE__);
           return sprintf(buf, "ID: error 0x03 \n");
       }
-      //CDBG("[Vince Debug] power up okay - start i2c tranfer %s:%d \n", __func__, __LINE__);
+      CDBG("[Vince Debug] power up okay - start i2c tranfer %s:%d \n", __func__, __LINE__);
       if(strcmp("SKUAA_ST_gc0339",s_ctrl->sensordata->sensor_name))
       {//for general
           rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read(
@@ -1221,7 +1221,7 @@ static ssize_t CheckCameraID_show(struct device *dev, struct device_attribute *a
           pr_err("%s: %s: read id failed\n", __func__,s_ctrl->sensordata->sensor_name);
           return sprintf(buf, "ID: error 0x01 \n");
       }
-      //CDBG("[Vince Debug] check id okay -start power dwon %s:%d \n", __func__, __LINE__);
+      CDBG("[Vince Debug] check id okay -start power dwon %s:%d \n", __func__, __LINE__);
       s_ctrl->func_tbl->sensor_power_down(s_ctrl);
   }
   else
