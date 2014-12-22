@@ -244,7 +244,9 @@ enum msm_vfe_reg_cfg_type {
 	GET_MAX_CLK_RATE,
 	VFE_HW_UPDATE_LOCK,
 	VFE_HW_UPDATE_UNLOCK,
+#ifndef CONFIG_SONY_EAGLE
 	SET_WM_UB_SIZE,
+#endif
 };
 
 struct msm_vfe_cfg_cmd2 {
