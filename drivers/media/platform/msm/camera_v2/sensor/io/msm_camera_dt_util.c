@@ -1171,7 +1171,7 @@ int msm_camera_power_down(struct msm_camera_power_ctrl_t *ctrl,
 		sensor_i2c_client->i2c_func_tbl->i2c_util(
 			sensor_i2c_client, MSM_CCI_RELEASE);
 
-        for (index = (ctrl->power_setting_size - 1); index >= 0; index--) {
+	for (index = 0; index < ctrl->power_down_setting_size; index++) {
 #ifdef CONFIG_SONY_EAGLE
 	gpio_set_value_cansleep(69, GPIOF_OUT_INIT_LOW);
 #endif
