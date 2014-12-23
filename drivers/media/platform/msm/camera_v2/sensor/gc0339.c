@@ -27,9 +27,10 @@ DEFINE_MSM_MUTEX(gc0339_mut);
 #define CDBG(fmt, args...) do { } while (0)
 #endif
 
-#ifdef CONFIG_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 static struct msm_sensor_ctrl_t gc0339_power_on;
 static struct msm_sensor_ctrl_t gc0339_power_off;
+#else
 int checksubcam_ID = 0;
 #endif
 
@@ -87,7 +88,7 @@ static struct msm_sensor_power_setting gc0339_power_setting[] = {
 	},
 };
 
-#ifdef CONFIG_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 static struct msm_sensor_power_setting gc0339_power_on_setting[] = {
 		{//1.PDN "L"
 			.seq_type = SENSOR_GPIO,
@@ -226,7 +227,7 @@ int32_t gc0339_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_camera_gpio_conf *gpio_conf = power_info->gpio_conf;
 
 	CDBG("%s:%d\n", __func__, __LINE__);
-#ifdef CONFIG_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 	power_setting_array = &gc0339_power_on.power_setting_array;
 #else
 	power_setting_array = &s_ctrl->power_setting_array;
@@ -407,7 +408,7 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_camera_gpio_conf *gpio_conf = power_info->gpio_conf;
 
 	CDBG("%s:%d\n", __func__, __LINE__);
-#ifdef CONFIG_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 	power_setting_array = &gc0339_power_off.power_setting_array;
 	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
 		s_ctrl->sensor_i2c_client,
@@ -422,7 +423,7 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 			s_ctrl->sensor_i2c_client, MSM_CCI_RELEASE);
 	}
 
-#ifndef CONFIG_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
 		s_ctrl->sensor_i2c_client,
 		0xfc,
@@ -435,7 +436,7 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 		CDBG("%s type %d\n", __func__, power_setting->seq_type);
 		switch (power_setting->seq_type) {
 		case SENSOR_CLK:
-#ifdef CONFIG_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 			msm_cam_clk_enable(power_info->dev,
 				&power_info->clk_info[0],
 				(struct clk **)&gc0339_power_on.power_setting_array.power_setting[index+1].data[0],
@@ -487,7 +488,7 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 					SENSOR_GPIO_MAX);
 				continue;
 			}
-#ifdef CONFIG_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 			msm_camera_config_single_vreg(power_info->dev,
 				&power_info->cam_vreg[power_setting->seq_val],
 				(struct regulator **)&gc0339_power_on.power_setting_array.power_setting[index].data[0],
@@ -834,7 +835,7 @@ static struct msm_sensor_ctrl_t gc0339_s_ctrl = {
 	.func_tbl = &gc0339_sensor_fn_t,
 };
 
-#ifdef CONFIG_SONY_EAGLE
+#ifndef CONFIG_SONY_EAGLE
 static struct msm_sensor_ctrl_t gc0339_power_on =
 {
 	.power_setting_array.power_setting = gc0339_power_on_setting,
