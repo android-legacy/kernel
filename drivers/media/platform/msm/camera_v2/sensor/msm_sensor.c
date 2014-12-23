@@ -1346,10 +1346,10 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 	msm_sd_register(&s_ctrl->msm_sd);
 	CDBG("%s:%d\n", __func__, __LINE__);
 
+#ifndef CONFIG_SONY_EAGLE
         s_ctrl->func_tbl->sensor_power_down(s_ctrl);
         CDBG("%s:%d\n", __func__, __LINE__);
-
-#ifdef CONFIG_SONY_EAGLE
+#else
   CDBG("[Vince Debug] Pin Function create Function Enter\t%s:%d\n", __func__, __LINE__);
   {
       if(device_create_file(&(pdev->dev), &dev_attr_CheckCameraID))
