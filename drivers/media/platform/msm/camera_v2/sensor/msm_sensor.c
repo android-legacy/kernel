@@ -1354,6 +1354,9 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
       }
   }
 #endif
+
+	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
+	CDBG("%s:%d\n", __func__, __LINE__);
 	return rc;
 }
 
