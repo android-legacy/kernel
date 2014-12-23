@@ -100,6 +100,7 @@
  /*Guanyi Bug904 QCT 80 header file EEPROM E*/
 /*[VY52] VinceT, [BugID:29], S, Main camera driver porting. */
     qcom,camera@20 {
+		cell-index = <0>;
 		compatible = "qcom,imx134";
 		reg = <0x20>;
 		qcom,slave-id = <0x20 0x0016 0x0134>;
@@ -143,6 +144,7 @@
 /*[VY52] VinceT, [BugID:144], S, Sub camera driver porting. */	
 
     qcom,camera@42 {
+		cell-index = <1>;
 		compatible = "shinetech,gc0339";
 		reg = <0x42>;
 		qcom,slave-id = <0x42 0x0 0xc8>;
@@ -257,7 +259,7 @@
 		qcom,cci-master = <0>;
 		status = "ok";
 	};
-	*/
+
 	qcom,camera@0 {
 		cell-index = <0>;
 		compatible = "qcom,camera";
@@ -325,4 +327,5 @@
 		qcom,cci-master = <0>;
 		status = "ok";
 	};
+	*/
 };
