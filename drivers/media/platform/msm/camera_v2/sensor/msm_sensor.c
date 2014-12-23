@@ -428,6 +428,11 @@ int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	struct msm_camera_power_ctrl_t *power_info;
 	enum msm_camera_device_type_t sensor_device_type;
 	struct msm_camera_i2c_client *sensor_i2c_client;
+#ifdef CONFIG_MACH_SONY_EAGLE
+        int32_t gpiotestnum = 0;
+        struct msm_sensor_power_setting *power_setting = NULL;
+        struct msm_camera_gpio_conf *gpio_conf = NULL;
+#endif
 	if (!s_ctrl) {
 		pr_err("%s:%d failed: s_ctrl %p\n",
 			__func__, __LINE__, s_ctrl);
@@ -437,6 +442,14 @@ int msm_sensor_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 	power_info = &s_ctrl->sensordata->power_info;
 	sensor_device_type = s_ctrl->sensor_device_type;
 	sensor_i2c_client = s_ctrl->sensor_i2c_client;
+
+#ifdef CONFIG_MACH_SONY_EAGLE
+                        gpiotestnum = gpio_conf->gpio_num_info->gpio_num
+                                        [power_setting->seq_val];
+                        if((gpiotestnum == 69) && (gpio69_count == 2)){
+                                CDBG("[VY5X][CTS]Avoid sub camera preview fail in CTS\n");
+                        }
+#endif
 
 	if (!power_info || !sensor_i2c_client) {
 		pr_err("%s:%d failed: power_info %p sensor_i2c_client %p\n",
@@ -1332,7 +1345,11 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 	s_ctrl->msm_sd.close_seq = MSM_SD_CLOSE_2ND_CATEGORY | 0x3;
 	msm_sd_register(&s_ctrl->msm_sd);
 	CDBG("%s:%d\n", __func__, __LINE__);
-#ifdef CONFIG_MACH_SONY_EAGLE
+
+#ifndef CONFIG_MACH_SONY_EAGLE
+        s_ctrl->func_tbl->sensor_power_down(s_ctrl);
+        CDBG("%s:%d\n", __func__, __LINE__);
+#else
   CDBG("[Vince Debug] Pin Function create Function Enter\t%s:%d\n", __func__, __LINE__);
   {
       if(device_create_file(&(pdev->dev), &dev_attr_CheckCameraID))

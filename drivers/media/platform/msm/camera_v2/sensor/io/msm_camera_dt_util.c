@@ -450,6 +450,10 @@ int msm_camera_get_dt_power_setting_data(struct device_node *of_node,
 			else if (!strcmp(seq_name, "sensor_gpio_vana"))
 				ps[i].seq_val = SENSOR_GPIO_VANA;
 #endif
+#ifdef CONFIG_MACH_SONY_EAGLE
+                        else if (!strcmp(seq_name, "sensor_gpio_vio"))
+                                ps[i].seq_val = SENSOR_GPIO_VIO;
+#endif
 			else
 				rc = -EILSEQ;
 			break;
@@ -982,6 +986,7 @@ int msm_camera_power_up(struct msm_camera_power_ctrl_t *ctrl,
 		ctrl->gpio_conf->cam_gpio_req_tbl_size, 1);
 	if (rc < 0)
 		no_gpio = rc;
+
 #ifdef CONFIG_MACH_SONY_EAGLE
 	gpio_set_value_cansleep(69,1);
 #endif
