@@ -40,7 +40,7 @@ int32_t msm_eeprom_config(struct msm_eeprom_ctrl_t *e_ctrl,
 	CDBG("%s E\n", __func__);
 	switch (cdata->cfgtype) {
 	case CFG_EEPROM_GET_INFO:
-		CDBG("%s E CFG_EEPROM_GET_INFO\n", __func__);
+	CDBG("%s E CFG_EEPROM_GET_INFO\n", __func__);
 		cdata->is_supported = e_ctrl->is_supported;
 		memcpy(cdata->cfg.eeprom_name,
 			e_ctrl->eboard_info->eeprom_name,
@@ -621,38 +621,6 @@ static int msm_eeprom_check_id(struct msm_eeprom_ctrl_t *e_ctrl)
 	return 0;
 }
 
-static int msm_eeprom_mm_dts(struct msm_eeprom_board_info *eb_info,
-				struct device_node *of_node)
-{
-	int rc = 0;
-	struct msm_eeprom_mm_t *mm_data = &eb_info->mm_data;
-
-	mm_data->mm_support =
-		of_property_read_bool(of_node,"qcom,mm-data-support");
-	if (!mm_data->mm_support)
-		return -EINVAL;
-	mm_data->mm_compression =
-		of_property_read_bool(of_node,"qcom,mm-data-compressed");
-	if (!mm_data->mm_compression)
-		pr_err("No MM compression data\n");
-
-	rc = of_property_read_u32(of_node, "qcom,mm-data-offset",
-				  &mm_data->mm_offset);
-	if (rc < 0)
-		pr_err("No MM offset data\n");
-
-	rc = of_property_read_u32(of_node, "qcom,mm-data-size",
-				  &mm_data->mm_size);
-	if (rc < 0)
-		pr_err("No MM size data\n");
-
-	CDBG("mm_support: mm_compr %d, mm_offset %d, mm_size %d\n",
-		mm_data->mm_compression,
-		mm_data->mm_offset,
-		mm_data->mm_size);
-	return 0;
-}
-
 static int msm_eeprom_spi_setup(struct spi_device *spi)
 {
 	struct msm_eeprom_ctrl_t *e_ctrl = NULL;
@@ -705,12 +673,6 @@ static int msm_eeprom_spi_setup(struct spi_device *spi)
 		pr_err("%s failed %d\n", __func__, __LINE__);
 		goto board_free;
 	}
-
-        rc = msm_eeprom_mm_dts(e_ctrl->eboard_info, spi->dev.of_node);
-	if (rc < 0) {
-		pr_err("%s MM data miss:%d\n", __func__, __LINE__);
-	}
-
 	power_info = &eb_info->power_info;
 
 	power_info->clk_info = cam_8974_clk_info;
@@ -946,10 +908,6 @@ static int32_t msm_eeprom_platform_probe(struct platform_device *pdev)
 		goto board_free;
 	}
 
-        rc = msm_eeprom_mm_dts(e_ctrl->eboard_info, of_node);
-	if (rc < 0) {
-		pr_err("%s MM data miss:%d\n", __func__, __LINE__);
-	}
 	rc = msm_eeprom_get_dt_data(e_ctrl);
 	if (rc)
 		goto board_free;
@@ -969,9 +927,9 @@ static int32_t msm_eeprom_platform_probe(struct platform_device *pdev)
 		pr_err("%s read_eeprom_memory failed\n", __func__);
 		goto power_down;
 	}
-                pr_err("%s line %d\n", __func__, __LINE__);
-        for (j = 0; j < e_ctrl->num_bytes; j++)
-                CDBG("memory_data[%d] = 0x%X\n", j, e_ctrl->memory_data[j]);
+		pr_err("%s line %d\n", __func__, __LINE__);
+	for (j = 0; j < e_ctrl->num_bytes; j++)
+		CDBG("memory_data[%d] = 0x%X\n", j, e_ctrl->memory_data[j]);
 #ifdef CONFIG_SONY_EAGLE
 		infinity_dac_t=(uint16_t)(e_ctrl->memory_data[0xD0] << 8) |
                   e_ctrl->memory_data[0xD1];
