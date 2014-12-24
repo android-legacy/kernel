@@ -241,11 +241,12 @@ struct msm_sensor_id_info_t {
 	uint16_t sensor_id;
 };
 
-struct msm_camera_sensor_slave_info {
-	uint16_t slave_addr;
-	enum msm_camera_i2c_reg_addr_type addr_type;
-	struct msm_sensor_id_info_t sensor_id_info;
-	struct msm_sensor_power_setting_array power_setting_array;
+enum msm_sensor_camera_id_t {
+	CAMERA_0,
+	CAMERA_1,
+	CAMERA_2,
+	CAMERA_3,
+	MAX_CAMERAS,
 };
 
 struct msm_camera_i2c_reg_array {
@@ -331,19 +332,20 @@ struct csi_lane_params_t {
 	uint8_t csi_phy_sel;
 };
 
-<<<<<<< HEAD
 enum camb_position_t {
 	BACK_CAMERA_B,
 	FRONT_CAMERA_B,
 	INVALID_CAMERA_B,
 };
 
-=======
->>>>>>> parent of 11d85b0... msm: camera: Multi module support in sensor architecture.
 struct msm_sensor_info_t {
 	char sensor_name[MAX_SENSOR_NAME];
 	int32_t    session_id;
 	int32_t     subdev_id[SUB_MODULE_MAX];
+	uint8_t  is_mount_angle_valid;
+	uint32_t sensor_mount_angle;
+	int modes_supported;
+	enum camb_position_t position;
 };
 
 struct camera_vreg_t {
@@ -353,11 +355,6 @@ struct camera_vreg_t {
 	int max_voltage;
 	int op_mode;
 	uint32_t delay;
-};
-
-enum camb_position_t {
-	BACK_CAMERA_B,
-	FRONT_CAMERA_B,
 };
 
 enum camerab_mode_t {
@@ -582,8 +579,10 @@ enum af_camera_name {
 	ACTUATOR_MAIN_CAM_3,
 	ACTUATOR_MAIN_CAM_4,
 	ACTUATOR_MAIN_CAM_5,
-	ACTUATOR_MAIN_CAM_6,/*Guanyi Bug904 QCT 80 header file*/
-	ACTUATOR_WEB_CAM_0,
+#ifdef CONFIG_SONY_EAGLE
+	ACTUATOR_MAIN_CAM_6,
+#endif
+        ACTUATOR_WEB_CAM_0,
 	ACTUATOR_WEB_CAM_1,
 	ACTUATOR_WEB_CAM_2,
 };
