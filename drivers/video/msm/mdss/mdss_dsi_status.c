@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -60,11 +60,6 @@ static void check_dsi_ctrl_status(struct work_struct *work)
 		return;
 	}
 
-	if (!pdsi_status->mfd->panel_power_on) {
-		pr_err("%s: panel off\n", __func__);
-		return;
-	}
-
 	pdsi_status->mfd->mdp.check_dsi_status(work, interval);
 }
 
@@ -110,6 +105,10 @@ static int fb_event_callback(struct notifier_block *self,
 
 	if (event == FB_EVENT_BLANK && evdata) {
 		int *blank = evdata->data;
+		struct dsi_status_data *pdata = container_of(self,
+				struct dsi_status_data, fb_notifier);
+		pdata->mfd = evdata->info->par;
+
 		switch (*blank) {
 		case FB_BLANK_UNBLANK:
 			schedule_delayed_work(&pdata->check_status,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,7 @@
 #include "dsi_io_v2.h"
 #include "dsi_host_v2.h"
 #include "mdss_debug.h"
+#include "mdp3.h"
 
 #define DSI_POLL_SLEEP_US 1000
 #define DSI_POLL_TIMEOUT_US 16000
@@ -536,8 +537,11 @@ void msm_dsi_controller_cfg(int enable)
 	if (readl_poll_timeout((ctrl_base + DSI_STATUS),
 				status,
 				((status & 0x02) == 0),
-				DSI_POLL_SLEEP_US, DSI_POLL_TIMEOUT_US))
+				DSI_POLL_SLEEP_US, DSI_POLL_TIMEOUT_US)) {
 		pr_err("%s: DSI status=%x failed\n", __func__, status);
+		pr_err("%s: Doing sw reset\n", __func__);
+		msm_dsi_sw_reset();
+	}
 
 	/* Check for x_HS_FIFO_EMPTY */
 	if (readl_poll_timeout((ctrl_base + DSI_FIFO_STATUS),
@@ -574,15 +578,20 @@ void msm_dsi_op_mode_config(int mode, struct mdss_panel_data *pdata)
 	pr_debug("msm_dsi_op_mode_config\n");
 
 	dsi_ctrl = MIPI_INP(ctrl_base + DSI_CTRL);
-	/*If Video enabled, Keep Video and Cmd mode ON */
 
-
-	dsi_ctrl &= ~0x06;
-
-	if (mode == DSI_VIDEO_MODE)
-		dsi_ctrl |= 0x02;
+	if (dsi_ctrl & DSI_VIDEO_MODE_EN)
+		dsi_ctrl &= ~(DSI_CMD_MODE_EN|DSI_EN);
 	else
-		dsi_ctrl |= 0x04;
+		dsi_ctrl &= ~(DSI_CMD_MODE_EN|DSI_VIDEO_MODE_EN|DSI_EN);
+
+	if (mode == DSI_VIDEO_MODE) {
+		dsi_ctrl |= (DSI_VIDEO_MODE_EN|DSI_EN);
+	} else {		/* command mode */
+		dsi_ctrl |= (DSI_CMD_MODE_EN|DSI_EN);
+		/*For Video mode panel, keep Video and Cmd mode ON */
+		if (pdata->panel_info.type == MIPI_VIDEO_PANEL)
+			dsi_ctrl |= DSI_VIDEO_MODE_EN;
+	}
 
 	pr_debug("%s: dsi_ctrl=%x\n", __func__, dsi_ctrl);
 
@@ -968,7 +977,13 @@ int msm_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		mutex_unlock(&ctrl->cmd_mutex);
 		return ret;
 	}
-
+	/*
+	 * mdss interrupt is generated in mdp core clock domain
+	 * mdp clock need to be enabled to receive dsi interrupt
+	 * also, axi bus bandwidth need since dsi controller will
+	 * fetch dcs commands from axi bus
+	 */
+	mdp3_res_update(1, 1, MDP3_CLIENT_DMA_P);
 	msm_dsi_clk_ctrl(&ctrl->panel_data, 1);
 
 	if (0 == (req->flags & CMD_REQ_LP_MODE))
@@ -983,6 +998,7 @@ int msm_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		dsi_set_tx_power_mode(1);
 
 	msm_dsi_clk_ctrl(&ctrl->panel_data, 0);
+	mdp3_res_update(0, 1, MDP3_CLIENT_DMA_P);
 
 	mutex_unlock(&ctrl->cmd_mutex);
 	return 0;
@@ -1059,13 +1075,15 @@ static int msm_dsi_on(struct mdss_panel_data *pdata)
 
 	mutex_lock(&ctrl_pdata->mutex);
 
-	ret = msm_dss_enable_vreg(
-		ctrl_pdata->power_data.vreg_config,
-		ctrl_pdata->power_data.num_vreg, 1);
-	if (ret) {
-		pr_err("%s: DSI power on failed\n", __func__);
-		mutex_unlock(&ctrl_pdata->mutex);
-		return ret;
+	if (!pdata->panel_info.dynamic_switch_pending) {
+		ret = msm_dss_enable_vreg(
+			ctrl_pdata->power_data.vreg_config,
+			ctrl_pdata->power_data.num_vreg, 1);
+		if (ret) {
+			pr_err("%s: DSI power on failed\n", __func__);
+			mutex_unlock(&ctrl_pdata->mutex);
+			return ret;
+		}
 	}
 
 	msm_dsi_ahb_ctrl(1);
@@ -1183,11 +1201,13 @@ static int msm_dsi_off(struct mdss_panel_data *pdata)
 	msm_dsi_phy_off(dsi_host_private->dsi_base);
 	msm_dsi_ahb_ctrl(0);
 
-	ret = msm_dss_enable_vreg(
-		ctrl_pdata->power_data.vreg_config,
-		ctrl_pdata->power_data.num_vreg, 0);
-	if (ret) {
-		pr_err("%s: Panel power off failed\n", __func__);
+	if (!pdata->panel_info.dynamic_switch_pending) {
+		ret = msm_dss_enable_vreg(
+			ctrl_pdata->power_data.vreg_config,
+			ctrl_pdata->power_data.num_vreg, 0);
+		if (ret) {
+			pr_err("%s: Panel power off failed\n", __func__);
+		}
 	}
 	dsi_host_private->clk_count = 0;
 	dsi_host_private->dsi_on = 0;
@@ -1504,13 +1524,16 @@ static int msm_dsi_clk_ctrl(struct mdss_panel_data *pdata, int enable)
 						&byteclk_rate, &pclk_rate);
 			msm_dsi_clk_set_rate(DSI_ESC_CLK_RATE, dsiclk_rate,
 						byteclk_rate, pclk_rate);
+			msm_dsi_prepare_clocks();
 			msm_dsi_clk_enable();
 		}
 	} else {
 		dsi_host_private->clk_count--;
 		if (dsi_host_private->clk_count == 0) {
+			msm_dsi_clear_irq(ctrl_pdata, ctrl_pdata->dsi_irq_mask);
 			msm_dsi_clk_set_rate(DSI_ESC_CLK_RATE, 0, 0, 0);
 			msm_dsi_clk_disable();
+			msm_dsi_unprepare_clocks();
 			msm_dsi_ahb_ctrl(0);
 		}
 	}

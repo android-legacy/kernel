@@ -55,6 +55,7 @@ enum smem_cache_ops {
 
 void *msm_vidc_open(int core_id, int session_type);
 int msm_vidc_close(void *instance);
+int msm_vidc_suspend(int core_id);
 int msm_vidc_querycap(void *instance, struct v4l2_capability *cap);
 int msm_vidc_enum_fmt(void *instance, struct v4l2_fmtdesc *f);
 int msm_vidc_s_fmt(void *instance, struct v4l2_format *f);
@@ -196,9 +197,9 @@ enum msm_vidc_extradata_type {
 	EXTRADATA_PANSCAN_WINDOW = 0x00000008,
 	EXTRADATA_RECOVERY_POINT_SEI = 0x00000009,
 	EXTRADATA_MPEG2_SEQDISP = 0x0000000D,
+	EXTRADATA_STREAM_USERDATA = 0x0000000E,
 	EXTRADATA_FRAME_QP = 0x0000000F,
 	EXTRADATA_FRAME_BITS_INFO = 0x00000010,
-	EXTRADATA_STREAM_USERDATA = 0x0000000E,
 	EXTRADATA_MULTISLICE_INFO = 0x7F100000,
 	EXTRADATA_NUM_CONCEALED_MB = 0x7F100001,
 	EXTRADATA_INDEX = 0x7F100002,
