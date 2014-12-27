@@ -453,6 +453,9 @@ static inline void set_page_order(struct page *page, int order)
 {
 	set_page_private(page, order);
 	__SetPageBuddy(page);
+#ifdef CONFIG_PAGE_OWNER
+	page->order = -1;
+#endif
 }
 
 static inline void rmv_page_order(struct page *page)
@@ -657,6 +660,8 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	int migratetype = 0;
 	int batch_free = 0;
 	int to_free = count;
+	int free = 0;
+	int cma_free = 0;
 	int mt = 0;
 
 	spin_lock(&zone->lock);
@@ -687,17 +692,23 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 		do {
 			page = list_entry(list->prev, struct page, lru);
 			mt = get_pageblock_migratetype(page);
+			if (likely(mt != MIGRATE_ISOLATE))
+				mt = page_private(page);
+
 			/* must delete as __free_one_page list manipulates */
 			list_del(&page->lru);
 			/* MIGRATE_MOVABLE list may include MIGRATE_RESERVEs */
-			__free_one_page(page, zone, 0, page_private(page));
-			trace_mm_page_pcpu_drain(page, 0, page_private(page));
-			if (is_migrate_cma(mt))
-				__mod_zone_page_state(zone,
-				NR_FREE_CMA_PAGES, 1);
+			__free_one_page(page, zone, 0, mt);
+			trace_mm_page_pcpu_drain(page, 0, mt);
+			if (likely(mt != MIGRATE_ISOLATE)) {
+				free++;
+				if (is_migrate_cma(mt))
+					cma_free++;
+			}
 		} while (--to_free && --batch_free && !list_empty(list));
 	}
-	__mod_zone_page_state(zone, NR_FREE_PAGES, count);
+	__mod_zone_page_state(zone, NR_FREE_PAGES, free);
+	__mod_zone_page_state(zone, NR_FREE_CMA_PAGES, cma_free);
 	spin_unlock(&zone->lock);
 }
 
@@ -727,6 +738,13 @@ static bool free_pages_prepare(struct page *page, unsigned int order)
 		bad += free_pages_check(page + i);
 	if (bad)
 		return false;
+
+#ifdef CONFIG_PAGE_OWNER
+	for (i = 0; i < (1 << order); i++) {
+		struct page *p = (page + i);
+		p->order = -1;
+	}
+#endif
 
 	if (!PageHighMem(page)) {
 		debug_check_no_locks_freed(page_address(page),PAGE_SIZE<<order);
@@ -2256,6 +2274,22 @@ __perform_reclaim(gfp_t gfp_mask, unsigned int order, struct zonelist *zonelist,
 	return progress;
 }
 
+static void
+set_page_owner(struct page *page, unsigned int order, gfp_t gfp_mask)
+{
+#ifdef CONFIG_PAGE_OWNER
+	struct stack_trace *trace = &page->trace;
+	trace->nr_entries = 0;
+	trace->max_entries = ARRAY_SIZE(page->trace_entries);
+	trace->entries = &page->trace_entries[0];
+	trace->skip = 3;
+	save_stack_trace(&page->trace);
+
+	page->order = (int) order;
+	page->gfp_mask = gfp_mask;
+#endif /* CONFIG_PAGE_OWNER */
+}
+
 /* The really slow allocator path where we enter direct reclaim */
 static inline struct page *
 __alloc_pages_direct_reclaim(gfp_t gfp_mask, unsigned int order,
@@ -2291,6 +2325,8 @@ retry:
 		goto retry;
 	}
 
+	if (page)
+		set_page_owner(page, order, gfp_mask);
 	return page;
 }
 
@@ -2568,6 +2604,8 @@ nopage:
 got_pg:
 	if (kmemcheck_enabled)
 		kmemcheck_pagealloc_alloc(page, order, gfp_mask);
+	if (page)
+		set_page_owner(page, order, gfp_mask);
 	return page;
 
 }
@@ -2637,6 +2675,9 @@ out:
 	 */
 	if (unlikely(!put_mems_allowed(cpuset_mems_cookie) && !page))
 		goto retry_cpuset;
+
+	if (page)
+		set_page_owner(page, order, gfp_mask);
 
 	return page;
 }
@@ -3880,6 +3921,9 @@ void __meminit memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 		/* The shift won't overflow because ZONE_NORMAL is below 4G. */
 		if (!is_highmem_idx(zone))
 			set_page_address(page, __va(pfn << PAGE_SHIFT));
+#endif
+#ifdef CONFIG_PAGE_OWNER
+		page->order = -1;
 #endif
 	}
 }

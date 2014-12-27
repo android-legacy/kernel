@@ -15,10 +15,15 @@
 #include <linux/freezer.h>
 #include <linux/kthread.h>
 #include <linux/scatterlist.h>
+#include <linux/bitops.h>
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 #include "queue.h"
+
+#ifdef CONFIG_SONY_EAGLE
+#include <linux/vmalloc.h>
+#endif
 
 #define MMC_QUEUE_BOUNCESZ	65536
 
@@ -75,11 +80,12 @@ static int mmc_queue_thread(void *d)
 		if (req || mq->mqrq_prev->req) {
 			set_current_state(TASK_RUNNING);
 			mq->issue_fn(mq, req);
-			if (mq->flags & MMC_QUEUE_NEW_REQUEST) {
+			if (test_bit(MMC_QUEUE_NEW_REQUEST, &mq->flags)) {
 				continue; /* fetch again */
-			} else if ((mq->flags & MMC_QUEUE_URGENT_REQUEST) &&
-				   (mq->mqrq_cur->req &&
-				!(mq->mqrq_cur->req->cmd_flags & REQ_URGENT))) {
+			} else if (test_bit(MMC_QUEUE_URGENT_REQUEST,
+					&mq->flags) && (mq->mqrq_cur->req &&
+					!(mq->mqrq_cur->req->cmd_flags &
+						MMC_REQ_NOREINSERT_MASK))) {
 				/*
 				 * clean current request when urgent request
 				 * processing in progress and current request is
@@ -199,7 +205,12 @@ static struct scatterlist *mmc_alloc_sg(int sg_len, int *err)
 {
 	struct scatterlist *sg;
 
+#ifndef CONFIG_SONY_EAGLE
 	sg = kmalloc(sizeof(struct scatterlist)*sg_len, GFP_KERNEL);
+#else
+	sg = vmalloc(sizeof(struct scatterlist)*sg_len);
+#endif
+
 	if (!sg)
 		*err = -ENOMEM;
 	else {
@@ -304,18 +315,31 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 			bouncesz = host->max_blk_count * 512;
 
 		if (bouncesz > 512) {
+#ifndef CONFIG_SONY_EAGLE
 			mqrq_cur->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
+#else
+			mqrq_cur->bounce_buf = vmalloc(bouncesz);
+#endif
 			if (!mqrq_cur->bounce_buf) {
 				pr_warning("%s: unable to "
 					"allocate bounce cur buffer\n",
 					mmc_card_name(card));
 			}
+#ifndef CONFIG_SONY_EAGLE
 			mqrq_prev->bounce_buf = kmalloc(bouncesz, GFP_KERNEL);
+#else
+			mqrq_prev->bounce_buf = vmalloc(bouncesz);
+#endif
 			if (!mqrq_prev->bounce_buf) {
 				pr_warning("%s: unable to "
 					"allocate bounce prev buffer\n",
 					mmc_card_name(card));
+#ifndef CONFIG_SONY_EAGLE
 				kfree(mqrq_cur->bounce_buf);
+#else
+				vfree(mqrq_cur->bounce_buf);
+#endif
+                            /**/
 				mqrq_cur->bounce_buf = NULL;
 			}
 		}
@@ -348,22 +372,43 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 #endif
 
 	if (!mqrq_cur->bounce_buf && !mqrq_prev->bounce_buf) {
+		unsigned int max_segs = host->max_segs;
+
 		blk_queue_bounce_limit(mq->queue, limit);
 		blk_queue_max_hw_sectors(mq->queue,
 			min(host->max_blk_count, host->max_req_size / 512));
-		blk_queue_max_segments(mq->queue, host->max_segs);
 		blk_queue_max_segment_size(mq->queue, host->max_seg_size);
+retry:
+		blk_queue_max_segments(mq->queue, host->max_segs);
 
 		mqrq_cur->sg = mmc_alloc_sg(host->max_segs, &ret);
-		if (ret)
+		if (ret == -ENOMEM)
+			goto cur_sg_alloc_failed;
+		else if (ret)
 			goto cleanup_queue;
-
 
 		mqrq_prev->sg = mmc_alloc_sg(host->max_segs, &ret);
-		if (ret)
+		if (ret == -ENOMEM)
+			goto prev_sg_alloc_failed;
+		else if (ret)
 			goto cleanup_queue;
+
+		goto success;
+
+prev_sg_alloc_failed:
+		kfree(mqrq_cur->sg);
+		mqrq_cur->sg = NULL;
+cur_sg_alloc_failed:
+		host->max_segs /= 2;
+		if (host->max_segs) {
+			goto retry;
+		} else {
+			host->max_segs = max_segs;
+			goto cleanup_queue;
+		}
 	}
 
+success:
 	sema_init(&mq->thread_sem, 1);
 
 	mq->thread = kthread_run(mmc_queue_thread, mq, "mmcqd/%d%s",
@@ -376,20 +421,47 @@ int mmc_init_queue(struct mmc_queue *mq, struct mmc_card *card,
 
 	return 0;
  free_bounce_sg:
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_cur->bounce_sg);
+#else
+	vfree(mqrq_cur->bounce_sg);
+#endif
 	mqrq_cur->bounce_sg = NULL;
+
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_prev->bounce_sg);
+#else
+        vfree(mqrq_prev->bounce_sg);
+#endif
 	mqrq_prev->bounce_sg = NULL;
 
  cleanup_queue:
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_cur->sg);
+#else
+        vfree(mqrq_cur->sg);
+#endif
 	mqrq_cur->sg = NULL;
+
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_cur->bounce_buf);
+#else
+        vfree(mqrq_cur->bounce_buf);
+#endif
 	mqrq_cur->bounce_buf = NULL;
 
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_prev->sg);
+#else
+        vfree(mqrq_prev->sg);
+#endif
 	mqrq_prev->sg = NULL;
+
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_prev->bounce_buf);
+#else
+        vfree(mqrq_prev->bounce_buf);
+#endif
 	mqrq_prev->bounce_buf = NULL;
 
 	blk_cleanup_queue(mq->queue);
@@ -415,22 +487,46 @@ void mmc_cleanup_queue(struct mmc_queue *mq)
 	blk_start_queue(q);
 	spin_unlock_irqrestore(q->queue_lock, flags);
 
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_cur->bounce_sg);
+#else
+        vfree(mqrq_cur->bounce_sg);
+#endif
 	mqrq_cur->bounce_sg = NULL;
 
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_cur->sg);
+#else
+        vfree(mqrq_cur->sg);
+#endif
 	mqrq_cur->sg = NULL;
 
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_cur->bounce_buf);
+#else
+        vfree(mqrq_cur->bounce_buf);
+#endif
 	mqrq_cur->bounce_buf = NULL;
 
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_prev->bounce_sg);
+#else
+        vfree(mqrq_prev->bounce_sg);
+#endif
 	mqrq_prev->bounce_sg = NULL;
 
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_prev->sg);
+#else
+        vfree(mqrq_prev->sg);
+#endif
 	mqrq_prev->sg = NULL;
 
+#ifndef CONFIG_SONY_EAGLE
 	kfree(mqrq_prev->bounce_buf);
+#else
+        vfree(mqrq_prev->bounce_buf);
+#endif
 	mqrq_prev->bounce_buf = NULL;
 
 	mq->card = NULL;
@@ -452,9 +548,7 @@ int mmc_queue_suspend(struct mmc_queue *mq, int wait)
 	unsigned long flags;
 	int rc = 0;
 
-	if (!(mq->flags & MMC_QUEUE_SUSPENDED)) {
-		mq->flags |= MMC_QUEUE_SUSPENDED;
-
+	if (!(test_and_set_bit(MMC_QUEUE_SUSPENDED, &mq->flags))) {
 		spin_lock_irqsave(q->queue_lock, flags);
 		blk_stop_queue(q);
 		spin_unlock_irqrestore(q->queue_lock, flags);
@@ -465,7 +559,7 @@ int mmc_queue_suspend(struct mmc_queue *mq, int wait)
 			 * Failed to take the lock so better to abort the
 			 * suspend because mmcqd thread is processing requests.
 			 */
-			mq->flags &= ~MMC_QUEUE_SUSPENDED;
+			clear_bit(MMC_QUEUE_SUSPENDED, &mq->flags);
 			spin_lock_irqsave(q->queue_lock, flags);
 			blk_start_queue(q);
 			spin_unlock_irqrestore(q->queue_lock, flags);
@@ -487,8 +581,7 @@ void mmc_queue_resume(struct mmc_queue *mq)
 	struct request_queue *q = mq->queue;
 	unsigned long flags;
 
-	if (mq->flags & MMC_QUEUE_SUSPENDED) {
-		mq->flags &= ~MMC_QUEUE_SUSPENDED;
+	if (test_and_clear_bit(MMC_QUEUE_SUSPENDED, &mq->flags)) {
 
 		up(&mq->thread_sem);
 

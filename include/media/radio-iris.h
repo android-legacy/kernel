@@ -37,7 +37,7 @@ const unsigned char MAX_TX_TONE_VAL = 0x07;
 const unsigned char MIN_HARD_MUTE_VAL = 0x00;
 const unsigned char MAX_HARD_MUTE_VAL = 0x03;
 const unsigned char MIN_SRCH_MODE = 0x00;
-const unsigned char MAX_SRCH_MODE = 0x01;
+const unsigned char MAX_SRCH_MODE = 0x09;
 const unsigned char MIN_SCAN_DWELL = 0x00;
 const unsigned char MAX_SCAN_DWELL = 0x0F;
 const unsigned char MIN_SIG_TH = 0x00;
@@ -723,7 +723,8 @@ enum iris_buf_t {
 	IRIS_BUF_CAL_DATA,
 	IRIS_BUF_RT_PLUS,
 	IRIS_BUF_ERT,
-	IRIS_BUF_MAX,
+	IRIS_BUF_EVENTS_CCI,
+	IRIS_BUF_MAX
 };
 
 enum iris_xfr_t {
