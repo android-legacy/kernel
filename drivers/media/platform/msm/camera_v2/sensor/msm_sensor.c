@@ -25,7 +25,7 @@
 uint16_t s5k5e2_version = 0;
 int powerup_count = 0;
 #endif
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 #include "eeprom/msm_eeprom.h"
 #endif
 
@@ -138,7 +138,7 @@ static int32_t msm_sensor_get_dt_data(struct device_node *of_node,
 		pr_err("%s failed %d\n", __func__, __LINE__);
 		goto FREE_SENSORDATA;
 	}
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	if(strcmp("imx134",s_ctrl->sensordata->sensor_name)==0) {
 		CDBG("%s:Main camera source no. is : %d\n", __func__,
 			cci_camera_source);
@@ -490,8 +490,10 @@ int msm_sensor_power_up(struct msm_sensor_ctrl_t *s_ctrl)
 
 int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 {
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 	int32_t gpiotestnum = 0;
+	struct msm_sensor_power_setting *pd = NULL;
+	struct msm_camera_gpio_conf *gpio_conf = NULL;
 #endif
 	int rc = 0;
 	uint16_t chipid = 0;
@@ -508,9 +510,9 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 	slave_info = s_ctrl->sensordata->slave_info;
 	sensor_name = s_ctrl->sensordata->sensor_name;
 
-#ifdef CONFIG_MACH_SONY_EAGLE
-			gpiotestnum = data->gpio_conf->gpio_num_info->gpio_num
-					[power_setting->seq_val];
+#ifdef CONFIG_SONY_EAGLE
+			gpiotestnum = gpio_conf->gpio_num_info->gpio_num
+					[pd->seq_val];
 			if((gpiotestnum == 69) && (gpio69_count == 2)){
 				CDBG("[VY5X][CTS]Avoid sub camera preview fail in CTS\n");
 			}
@@ -1163,7 +1165,7 @@ static struct msm_camera_i2c_fn_t msm_sensor_qup_func_tbl = {
 	.i2c_write_conf_tbl = msm_camera_qup_i2c_write_conf_tbl,
 };
 
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
 static ssize_t CheckCameraID_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
   uint16_t rc;
@@ -1346,10 +1348,10 @@ int32_t msm_sensor_platform_probe(struct platform_device *pdev, void *data)
 
 	s_ctrl->func_tbl->sensor_power_down(s_ctrl);
 	CDBG("%s:%d\n", __func__, __LINE__);
-#ifdef CONFIG_MACH_SONY_EAGLE
+#ifdef CONFIG_SONY_EAGLE
   CDBG("[Vince Debug] Pin Function create Function Enter\t%s:%d\n", __func__, __LINE__);
   {
-      if(device_create_file(s_ctrl->dev, &dev_attr_CheckCameraID))
+      if(device_create_file(&(pdev->dev), &dev_attr_CheckCameraID))
       {
           pr_err("[Vince Debug] Ping Function create fail!!\t%s:%d\n", __func__, __LINE__);
       }
