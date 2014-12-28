@@ -241,13 +241,6 @@ struct msm_sensor_id_info_t {
 	uint16_t sensor_id;
 };
 
-struct msm_camera_sensor_slave_info {
-	uint16_t slave_addr;
-	enum msm_camera_i2c_reg_addr_type addr_type;
-	struct msm_sensor_id_info_t sensor_id_info;
-	struct msm_sensor_power_setting_array power_setting_array;
-};
-
 struct msm_camera_i2c_reg_array {
 	uint16_t reg_addr;
 	uint16_t reg_data;
@@ -331,15 +324,6 @@ struct csi_lane_params_t {
 	uint8_t csi_phy_sel;
 };
 
-<<<<<<< HEAD
-enum camb_position_t {
-	BACK_CAMERA_B,
-	FRONT_CAMERA_B,
-	INVALID_CAMERA_B,
-};
-
-=======
->>>>>>> parent of 11d85b0... msm: camera: Multi module support in sensor architecture.
 struct msm_sensor_info_t {
 	char sensor_name[MAX_SENSOR_NAME];
 	int32_t    session_id;
@@ -379,7 +363,6 @@ struct msm_camera_sensor_slave_info {
 	char sensor_name[32];
 	char eeprom_name[32];
 	char actuator_name[32];
-	enum msm_sensor_camera_id_t camera_id;
 	uint16_t slave_addr;
 	enum msm_camera_i2c_reg_addr_type addr_type;
 	struct msm_sensor_id_info_t sensor_id_info;
