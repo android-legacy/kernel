@@ -405,22 +405,15 @@ int32_t gc0339_power_down(struct msm_sensor_ctrl_t *s_ctrl)
 #else
 	power_setting_array = &s_ctrl->power_setting_array;
 #endif
-#ifdef CONFIG_SONY_EAGLE
-	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
-		s_ctrl->sensor_i2c_client,
-		0xfc,
-		0x01, MSM_CAMERA_I2C_BYTE_DATA);
-#endif
 	if (s_ctrl->sensor_device_type == MSM_CAMERA_PLATFORM_DEVICE) {
 		s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_util(
 			s_ctrl->sensor_i2c_client, MSM_CCI_RELEASE);
 	}
-#ifndef CONFIG_SONY_EAGLE
+
 	s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_write(
 		s_ctrl->sensor_i2c_client,
 		0xfc,
 		0x01, MSM_CAMERA_I2C_BYTE_DATA);
-#endif
 
 	for (index = (power_setting_array->size - 1); index >= 0; index--) {
 		CDBG("%s index %d\n", __func__, index);
