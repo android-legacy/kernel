@@ -1554,6 +1554,9 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 	struct mdss_panel_data *pdata;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 
+	if (blank_mode == FB_BLANK_VSYNC_SUSPEND)
+		blank_mode = FB_BLANK_UNBLANK;
+
 	mdss_fb_pan_idle(mfd);
 	if (mfd->op_enable == 0) {
 		if (blank_mode == FB_BLANK_UNBLANK)
