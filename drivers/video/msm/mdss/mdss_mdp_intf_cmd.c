@@ -160,7 +160,7 @@ static int mdss_mdp_cmd_tearcheck_cfg(struct mdss_mdp_ctl *ctl,
 
 		cfg |= vclks_line;
 
-		height = (ctx->height + ctx->vporch) * 2;
+//		height = (ctx->height + ctx->vporch) * 2;
 
 		pr_debug("%s: yres=%d vclks=%x height=%d init=%d rd=%d start=%d ",
 			__func__, pinfo->yres, vclks_line, te->sync_cfg_height,
@@ -169,18 +169,11 @@ static int mdss_mdp_cmd_tearcheck_cfg(struct mdss_mdp_ctl *ctl,
 			te->sync_threshold_start, te->sync_threshold_continue);
 	}
 
-	pingpong_base = mixer->pingpong_base;
-	/* for dst split pp_num is cmd session (0 and 1) */
-	if (is_split_dst(ctl->mfd))
-		pingpong_base += ctx->pp_num * SPLIT_MIXER_OFFSET;
-
-	mdss_mdp_pingpong_write(pingpong_base,
-		MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
-	mdss_mdp_pingpong_write(pingpong_base,
-		MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT,
+	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
+	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT,
 		te ? te->sync_cfg_height : 0);
-	mdss_mdp_pingpong_write(pingpong_base,
-		MDSS_MDP_REG_PP_VSYNC_INIT_VAL,
+	//height);
+	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_VSYNC_INIT_VAL,
 		te ? te->vsync_init_val : 0);
 	mdss_mdp_pingpong_write(pingpong_base,
 		MDSS_MDP_REG_PP_RD_PTR_IRQ,
@@ -851,7 +844,7 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	MDSS_XLOG(ctl->num,  atomic_read(&ctx->koff_cnt), ctx->clk_enabled,
 						ctx->rdptr_enabled);
 
-	if (!__mdss_mdp_cmd_is_panel_power_on_interactive(ctx))
+	if (!__mdss_mdp_cmd_is_panel_power_on_interactive(ctx)) {
 		if (ctl->mfd) {
 			struct mdss_panel_data *pdata;
 			pdata = dev_get_platdata(&ctl->mfd->pdev->dev);
@@ -915,16 +908,13 @@ int mdss_mdp_cmd_intfs_stop(struct mdss_mdp_ctl *ctl, int session,
 	}
 	spin_unlock_irqrestore(&ctx->clk_lock, flags);
 
-	if (need_wait) {
-		hz = mdss_panel_get_framerate(&ctl->panel_data->panel_info);
-		if (wait_for_completion_timeout(&ctx->stop_comp,
-			STOP_TIMEOUT(hz)) <= 0) {
-			WARN(1, "stop cmd time out\n");
-			mdss_mdp_irq_disable(MDSS_MDP_IRQ_PING_PONG_RD_PTR,
-				ctx->pp_num);
-			ctx->rdptr_enabled = 0;
-			atomic_set(&ctx->koff_cnt, 0);
-		}
+	if (need_wait && (wait_for_completion_timeout(&ctx->stop_comp,
+		STOP_TIMEOUT(mdss_panel_get_framerate(&ctl->panel_data->panel_info))) == 0)) {
+		WARN(1, "stop cmd time out\n");
+		mdss_mdp_irq_disable(MDSS_MDP_IRQ_PING_PONG_RD_PTR,
+			ctx->pp_num);
+		ctx->rdptr_enabled = 0;
+		atomic_set(&ctx->koff_cnt, 0);
 	}
 
 	if (cancel_work_sync(&ctx->clk_work))
