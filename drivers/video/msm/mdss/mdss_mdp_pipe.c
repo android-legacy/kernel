@@ -814,6 +814,11 @@ int mdss_mdp_pipe_destroy(struct mdss_mdp_pipe *pipe)
 	return 0;
 }
 
+//S [VVVV] JackBB 2013/8/9
+extern int check_mdss_mdp_mfd_index(struct msm_fb_data_type *mfd);
+extern int g_mdss_dsi_lcd_id;
+//E [VVVV] JackBB 2013/8/9
+
 /**
  * mdss_mdp_pipe_handoff() - Handoff staged pipes during bootup
  * @pipe: pointer to the pipe to be handed-off
@@ -942,19 +947,24 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 	src_size = (src.h << 16) | src.w;
 	src_xy = (src.y << 16) | src.x;
 	dst_size = (dst.h << 16) | dst.w;
-
-#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
-	if (mdss_dsi_panel_flip_ud()) {
-		if (pipe->mfd && pipe->mfd->panel_info &&
-			pipe->mfd->panel_info->pdest == DISPLAY_1)
-			dst_xy = ((pipe->mixer->height -
-				   (pipe->dst.y + pipe->dst.h)) << 16) |
-				pipe->dst.x;
-		else
-			dst_xy = (pipe->dst.y << 16) | pipe->dst.x;
-	} else
-#endif
 	dst_xy = (dst.y << 16) | dst.x;
+
+
+//S JackBB 7/29 Screen 180
+#ifndef CONFIG_MACH_SONY_EAGLE
+	dst_xy = (dst.y << 16) | dst.x;
+#else
+  if(pipe->mfd && check_mdss_mdp_mfd_index(pipe->mfd) == 0 && g_mdss_dsi_lcd_id == 0)
+  {
+    dst_xy = (((960- dst.y - dst.h) << 16) |
+    (540- dst.x - dst.w));
+  }
+  else
+  {
+    dst_xy = (dst.y << 16) | dst.x;
+  }
+#endif
+//E JackBB 7/29 Screen 180
 
 	ystride0 =  (pipe->src_planes.ystride[0]) |
 			(pipe->src_planes.ystride[1] << 16);
@@ -1018,6 +1028,23 @@ static int mdss_mdp_format_setup(struct mdss_mdp_pipe *pipe)
 	if (pipe->flags & MDP_FLIP_UD)
 		opmode |= MDSS_MDP_OP_FLIP_UD;
 
+//S JackBB 7/29 Screen 180
+#ifdef CONFIG_MACH_SONY_EAGLE
+  if(pipe->mfd && check_mdss_mdp_mfd_index(pipe->mfd) == 0 && g_mdss_dsi_lcd_id == 0)
+  {
+    if(opmode & MDSS_MDP_OP_FLIP_LR)
+      opmode &= ~MDSS_MDP_OP_FLIP_LR; 
+    else
+      opmode |= MDSS_MDP_OP_FLIP_LR; 
+
+    if(opmode & MDSS_MDP_OP_FLIP_UD)
+      opmode &= ~MDSS_MDP_OP_FLIP_UD; 
+    else
+      opmode |= MDSS_MDP_OP_FLIP_UD; 
+  }
+#endif
+//E JackBB 7/29 Screen 180
+
 	pr_debug("pnum=%d format=%d opmode=%x\n", pipe->num, fmt->format,
 			opmode);
 
@@ -1057,16 +1084,6 @@ static int mdss_mdp_format_setup(struct mdss_mdp_pipe *pipe)
 
 	if (pipe->scale.enable_pxl_ext)
 		opmode |= (1 << 31);
-
-#ifdef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
-	if (mdss_dsi_panel_flip_ud()) {
-		if (pipe->mfd && pipe->mfd->panel_info &&
-			pipe->mfd->panel_info->pdest == DISPLAY_1) {
-			opmode ^= MDSS_MDP_OP_FLIP_LR;
-			opmode ^= MDSS_MDP_OP_FLIP_UD;
-			}
-	}
-#endif
 
 	if (fmt->tile && mdata->highest_bank_bit) {
 		mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_FETCH_CONFIG,
