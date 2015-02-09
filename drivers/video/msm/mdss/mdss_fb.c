@@ -935,6 +935,9 @@ static int mdss_fb_probe(struct platform_device *pdev)
         }
 #endif  /* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
+	if (mfd->mdp.splash_init_fnc)
+		mfd->mdp.splash_init_fnc(mfd);
+
         INIT_DELAYED_WORK(&mfd->idle_notify_work, __mdss_fb_idle_notify_work);
 
         return rc;
@@ -959,7 +962,6 @@ static void mdss_fb_set_mdp_sync_pt_threshold(struct msm_fb_data_type *mfd)
 		mfd->mdp_sync_pt_data.retire_threshold = 0;
 		break;
 	}
-
 }
 
 static int mdss_fb_remove(struct platform_device *pdev)
