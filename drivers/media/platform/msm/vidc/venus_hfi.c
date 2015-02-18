@@ -815,18 +815,10 @@ static int venus_hfi_get_bus_vector(struct venus_hfi_device *device,
 	int num_rows = ARRAY_SIZE(venus_hfi_bus_table);
 	int i, j;
 
-	pkt = (struct hfi_cmd_sys_set_resource_packet *) packet;
-
-	rc = create_pkt_set_cmd_sys_resource(pkt, resource_hdr,
-						resource_value);
-	if (rc) {
-		dprintk(VIDC_ERR, "set_res: failed to create packet\n");
-		goto err_create_pkt;
+	for (i = 0; i < num_rows; i++) {
+		if (load <= venus_hfi_bus_table[i])
+			break;
 	}
-	rc = locked ? venus_hfi_iface_cmdq_write(dev, pkt) :
-			venus_hfi_iface_cmdq_write_nolock(dev, pkt);
-	if (rc)
-		rc = -ENOTEMPTY;
 
 	j = clamp(i, 0, num_rows - 1);
 
@@ -834,17 +826,8 @@ static int venus_hfi_get_bus_vector(struct venus_hfi_device *device,
 	* as specified in the device dtsi file */
 	j = clamp(j, 0, bus->pdata->num_usecases - 1);
 
-	rc = create_pkt_cmd_sys_release_resource(&pkt, resource_hdr);
-	if (rc) {
-		dprintk(VIDC_ERR, "release_res: failed to create packet\n");
-		goto err_create_pkt;
-	}
-
-	if (venus_hfi_iface_cmdq_write(dev, &pkt))
-		rc = -ENOTEMPTY;
-
-err_create_pkt:
-	return rc;
+	dprintk(VIDC_DBG, "Required bus = %d\n", j);
+	return j;
 }
 
 static bool venus_hfi_is_session_supported(unsigned long sessions_supported,
@@ -975,9 +958,6 @@ static int venus_hfi_vote_buses(void *dev, struct vidc_bus_vote_data *data,
 					bus->pdata->name, bus_vector, load);
 		}
 	}
-ocmem_alloc_failed:
-	return rc;
-}
 
 	/* Cache the votes */
 	for (i = 0; i < num_data; ++i)
@@ -999,8 +979,7 @@ static int venus_hfi_unvote_buses(void *dev)
 	int rc = 0;
 
 	if (!device) {
-		dprintk(VIDC_ERR, "%s Invalid param, device: 0x%p\n",
-				__func__, device);
+		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
 		return -EINVAL;
 	}
 

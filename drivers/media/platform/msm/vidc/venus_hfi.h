@@ -19,7 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/msm_iommu_domains.h>
-#include <soc/qcom/ocmem.h>
+#include <mach/ocmem.h>
 #include "vidc_hfi_api.h"
 #include "vidc_hfi_helper.h"
 #include "vidc_hfi_api.h"
@@ -186,7 +186,7 @@ struct venus_hfi_device {
 	bool power_enabled;
 	struct mutex read_lock;
 	struct mutex write_lock;
-	struct mutex resource_lock;
+	struct mutex clk_pwr_lock;
 	struct mutex session_lock;
 	msm_vidc_callback callback;
 	struct vidc_mem_addr iface_q_table;

@@ -691,7 +691,8 @@ static inline void mdss_panel_debugfs_cleanup(
 			struct mdss_panel_info *panel_info) { };
 static inline void mdss_panel_debugfsinfo_to_panelinfo(
 			struct mdss_panel_info *panel_info) { };
-
+#endif
+1
 struct msm_fb_data_type;
 #if defined(CONFIG_DEBUG_FS) && defined(CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL)
 void mipi_dsi_panel_create_debugfs(struct msm_fb_data_type *mfd);
