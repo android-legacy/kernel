@@ -385,12 +385,7 @@ static int ramp_up_first_cpu(int cpu, int saved_rate)
 		pr_info("CPU%u: %s: restore clock rate\n",
 				cpu, __func__);
 
-	if (l2_clk) {
-		rc = clk_enable(l2_clk);
-		if (rc)
-			pr_err("%s(): Error restoring l2 clk\n",
-					__func__);
-	}
+	clk_enable(l2_clk);
 
 	if (cpu_clk) {
 		int ret = clk_enable(cpu_clk);
@@ -797,7 +792,7 @@ static inline u32 msm_pc_debug_counters_read_register(
 	return readl_relaxed(reg + (index * 4 + offset) * 4);
 }
 
-static char *counter_name[] = {
+char *counter_name[MSM_PC_NUM_COUNTERS] = {
 		"PC Entry Counter",
 		"Warmboot Entry Counter",
 		"PC Bailout Counter"
@@ -809,19 +804,24 @@ static int msm_pc_debug_counters_copy(
 	int j;
 	u32 stat;
 	unsigned int cpu;
+	unsigned int len;
 
 	for_each_possible_cpu(cpu) {
-		data->len += scnprintf(data->buf + data->len,
+		len = scnprintf(data->buf + data->len,
 				sizeof(data->buf)-data->len,
 				"CPU%d\n", cpu);
 
+		data->len += len;
+
 		for (j = 0; j < MSM_PC_NUM_COUNTERS; j++) {
 			stat = msm_pc_debug_counters_read_register(
-					data->reg, cpu, j);
-			data->len += scnprintf(data->buf + data->len,
-					sizeof(data->buf)-data->len,
-					"\t%s : %d\n", counter_name[j],
-					stat);
+				data->reg, cpu, j);
+			 len = scnprintf(data->buf + data->len,
+					 sizeof(data->buf) - data->len,
+					"\t%s: %d", counter_name[j], stat);
+
+			 data->len += len;
+
 		}
 
 	}
@@ -920,8 +920,11 @@ static int msm_pm_clk_init(struct platform_device *pdev)
 		return 0;
 
 	l2_clk = devm_clk_get(&pdev->dev, "l2_clk");
+	if (IS_ERR(l2_clk))
+		pr_warn("%s: Could not get l2_clk (-%ld)\n", __func__,
+			PTR_ERR(l2_clk));
 
-	return PTR_RET(l2_clk);
+	return 0;
 }
 
 static int msm_cpu_pm_probe(struct platform_device *pdev)

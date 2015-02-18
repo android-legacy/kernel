@@ -3335,6 +3335,8 @@ static void msm_ipc_router_remove_xprt(struct msm_ipc_router_xprt *xprt)
 		list_del(&xprt_info->list);
 		up_write(&xprt_info_list_lock_lha5);
 
+		msm_ipc_cleanup_routing_table(xprt_info);
+
 		flush_workqueue(xprt_info->workqueue);
 		destroy_workqueue(xprt_info->workqueue);
 		wakeup_source_trash(&xprt_info->ws);
@@ -3364,7 +3366,6 @@ static void xprt_close_worker(struct work_struct *work)
 	struct msm_ipc_router_xprt_work *xprt_work =
 		container_of(work, struct msm_ipc_router_xprt_work, work);
 
-	msm_ipc_cleanup_routing_table(xprt_work->xprt->priv);
 	msm_ipc_router_remove_xprt(xprt_work->xprt);
 	xprt_work->xprt->sft_close_done(xprt_work->xprt);
 	kfree(xprt_work);
@@ -3447,7 +3448,7 @@ static int __init msm_ipc_router_init(void)
 
 	msm_ipc_router_debug_mask |= SMEM_LOG;
 	ipc_rtr_log_ctxt = ipc_log_context_create(IPC_RTR_LOG_PAGES,
-						  "ipc_router");
+						  "ipc_router", 0);
 	if (!ipc_rtr_log_ctxt)
 		IPC_RTR_ERR("%s: Unable to create IPC logging for IPC RTR",
 			__func__);

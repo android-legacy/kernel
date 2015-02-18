@@ -60,6 +60,7 @@ modules.builtin
 # Generated include files
 #
 include/config
+include/linux/version.h
 include/generated
 arch/*/include/generated
 
@@ -81,8 +82,12 @@ GSYMS
 GTAGS
 
 *.orig
+*.rej
 *~
 \#*#
+
+# CAF files
+arch/arm/mach-msm/smd_rpc_sym.c
 
 #
 # Leavings from module signing

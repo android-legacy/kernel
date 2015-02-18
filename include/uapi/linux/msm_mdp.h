@@ -72,6 +72,7 @@
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
 
+#ifdef __KERNEL__
 /* HW Revisions for different MDSS targets */
 #define MDSS_GET_MAJOR(rev)		((rev) >> 28)
 #define MDSS_GET_MINOR(rev)		(((rev) >> 16) & 0xFFF)
@@ -95,6 +96,7 @@
 #define MDSS_MDP_HW_REV_103	MDSS_MDP_REV(1, 3, 0) /* 8084 v1.0 */
 #define MDSS_MDP_HW_REV_103_1	MDSS_MDP_REV(1, 3, 1) /* 8084 v1.1 */
 #define MDSS_MDP_HW_REV_200	MDSS_MDP_REV(2, 0, 0) /* 8092 v1.0 */
+#endif
 
 enum {
 	NOTIFY_UPDATE_START,
@@ -214,6 +216,7 @@ enum {
 #define MDP_MEMORY_ID_TYPE_FB		0x00001000
 #define MDP_BWC_EN			0x00000400
 #define MDP_DECIMATION_EN		0x00000800
+#define MDP_SMP_FORCE_ALLOC		0x00200000
 #define MDP_TRANSP_NOP 0xffffffff
 #define MDP_ALPHA_NOP 0xff
 

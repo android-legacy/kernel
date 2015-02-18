@@ -94,7 +94,10 @@ static inline void dsb_sev(void)
 
 static inline void arch_spin_lock(arch_spinlock_t *lock)
 {
-	unsigned long tmp, flags = 0;
+	unsigned long tmp;
+#ifdef CONFIG_MSM_KRAIT_WFE_FIXUP
+	unsigned long flags = 0;
+#endif
 	u32 newval;
 	arch_spinlock_t lockval;
 
@@ -109,6 +112,7 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 	: "cc");
 
 	while (lockval.tickets.next != lockval.tickets.owner) {
+#ifdef CONFIG_MSM_KRAIT_WFE_FIXUP
 		if (msm_krait_need_wfe_fixup) {
 			local_save_flags(flags);
 			local_fiq_disable();
@@ -125,7 +129,8 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 			: "cc");
 			isb();
 		}
-
+#endif
+#ifndef CONFIG_ARCH_MSM8226
 		__asm__ __volatile__(
 		    "mrc    p15, 7, %0, c15, c0, 5\n"
 		    : "=r" (tmp)
@@ -138,9 +143,9 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 		    : "r" (tmp)
 		    : "cc");
 		isb();
-
+#endif
 		wfe();
-
+#ifndef CONFIG_ARCH_MSM8226
 		tmp &= ~(0x1);
 		__asm__ __volatile__(
 		    "mcr   p15, 7, %0, c15, c0, 5\n"
@@ -148,7 +153,8 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 		    : "r" (tmp)
 		    : "cc");
 		isb();
-
+#endif
+#ifdef CONFIG_MSM_KRAIT_WFE_FIXUP
 		if (msm_krait_need_wfe_fixup) {
 			tmp |= 0x10000;
 			__asm__ __volatile__(
@@ -159,6 +165,7 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 			isb();
 			local_irq_restore(flags);
 		}
+#endif
 		lockval.tickets.owner = ACCESS_ONCE(lock->tickets.owner);
 	}
 
