@@ -811,35 +811,16 @@ static int mdss_dsi_link_clk_set_rate(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		return -EINVAL;
 	}
 
-	/*
-	 * In sync_wait_broadcast mode, we need to enable clocks
-	 * for the other controller as well when enabling clocks
-	 * for the trigger controller.
-	 *
-	 * If sync wait_broadcase mode is not enabled, but if split display
-	 * mode is enabled where both DSI controller's branch clocks are
-	 * sourced out of a single PLL, then we need to ensure that the
-	 * controller associated with that PLL also has it's clocks turned
-	 * on. This is required to make sure that if that controller's PLL/PHY
-	 * are clamped then they can be removed.
-	 */
-	if (mdss_dsi_sync_wait_trigger(ctrl)) {
-		mctrl = mdss_dsi_get_other_ctrl(ctrl);
-		if (!mctrl)
-			pr_warn("%s: Unable to get other control\n", __func__);
-	} else if (mdss_dsi_is_ctrl_clk_slave(ctrl)) {
-		mctrl = mdss_dsi_get_ctrl_clk_master();
-		if (!mctrl)
-			pr_warn("%s: Unable to get clk master control\n",
+	if (!ctrl_pdata->panel_data.panel_info.cont_splash_enabled) {
+		pr_debug("%s: Set clk rates: pclk=%d, byteclk=%d escclk=%d\n",
+			__func__, ctrl_pdata->pclk_rate,
+			ctrl_pdata->byte_clk_rate, esc_clk_rate);
+		rc = clk_set_rate(ctrl_pdata->esc_clk, esc_clk_rate);
+		if (rc) {
+			pr_err("%s: dsi_esc_clk - clk_set_rate failed\n",
 				__func__);
-	}
-
-	pr_debug("%s++: ndx=%d clk_type=%d bus_clk_cnt=%d link_clk_cnt=%d\n",
-		__func__, ctrl->ndx, clk_type, ctrl->bus_clk_cnt,
-		ctrl->link_clk_cnt);
-	pr_debug("%s++: mctrl=%s m_bus_clk_cnt=%d m_link_clk_cnt=%d, enable=%d\n",
-		__func__, mctrl ? "yes" : "no", mctrl ? mctrl->bus_clk_cnt : -1,
-		mctrl ? mctrl->link_clk_cnt : -1, enable);
+			goto error;
+		}
 
 		rc =  clk_set_rate(ctrl_pdata->byte_clk,
 			ctrl_pdata->byte_clk_rate);
@@ -1346,17 +1327,7 @@ error:
 
 static int __mdss_dsi_update_clk_cnt(u32 *clk_cnt, int enable)
 {
-	int ret = 0;
-	struct mdss_panel_data *pdata = NULL;
-	struct mdss_panel_info *pinfo;
-	struct mipi_panel_info *mipi;
-	u32 lane_status = 0;
-	u32 active_lanes = 0;
-
-	if (!ctrl) {
-		pr_err("%s: invalid input\n", __func__);
-		return -EINVAL;
-	}
+	int changed = 0;
 
 	if (enable) {
 		if (*clk_cnt == 0)
@@ -1370,11 +1341,6 @@ static int __mdss_dsi_update_clk_cnt(u32 *clk_cnt, int enable)
 		} else {
 			pr_debug("%s: clk cnt already zero\n", __func__);
 		}
-		ctrl->mmss_clamp = false;
-	} else {
-		pr_debug("%s: No change requested: %s -> %s\n", __func__,
-			ctrl->mmss_clamp ? "enabled" : "disabled",
-			enable ? "enabled" : "disabled");
 	}
 
 	return changed;
@@ -1493,14 +1459,26 @@ int mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl,
 	}
 
 	/*
-	 * In broadcast mode, we need to enable clocks for the
-	 * master controller as well when enabling clocks for the
-	 * slave controller
+	 * In sync_wait_broadcast mode, we need to enable clocks
+	 * for the other controller as well when enabling clocks
+	 * for the trigger controller.
+	 *
+	 * If sync wait_broadcase mode is not enabled, but if split display
+	 * mode is enabled where both DSI controller's branch clocks are
+	 * sourced out of a single PLL, then we need to ensure that the
+	 * controller associated with that PLL also has it's clocks turned
+	 * on. This is required to make sure that if that controller's PLL/PHY
+	 * are clamped then they can be removed.
 	 */
-	if (mdss_dsi_is_slave_ctrl(ctrl)) {
-		mctrl = mdss_dsi_get_master_ctrl();
+	if (mdss_dsi_sync_wait_trigger(ctrl)) {
+		mctrl = mdss_dsi_get_other_ctrl(ctrl);
 		if (!mctrl)
-			pr_warn("%s: Unable to get master control\n", __func__);
+			pr_warn("%s: Unable to get other control\n", __func__);
+	} else if (mdss_dsi_is_ctrl_clk_slave(ctrl)) {
+		mctrl = mdss_dsi_get_ctrl_clk_master();
+		if (!mctrl)
+			pr_warn("%s: Unable to get clk master control\n",
+				__func__);
 	}
 
 	pr_debug("%s++: ndx=%d clk_type=%d bus_clk_cnt=%d link_clk_cnt=%d\n",
@@ -1538,7 +1516,7 @@ int mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl,
 	if (link_changed && (!bus_changed && !ctrl->bus_clk_cnt)) {
 		pr_err("%s: Trying to enable link clks w/o enabling bus clks for ctrl%d",
 			__func__, ctrl->ndx);
-		goto error_mctrl_start;
+		goto error_mctrl_bus_start;
 	}
 
 	if (m_link_changed && (!m_bus_changed && !mctrl->bus_clk_cnt)) {

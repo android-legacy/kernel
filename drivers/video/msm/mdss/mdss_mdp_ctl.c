@@ -658,9 +658,6 @@ static void mdss_mdp_perf_calc_mixer(struct mdss_mdp_mixer *mixer,
 	u32 prefill_bytes = 0;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	bool apply_fudge = true;
-	u32 bw_vote_mode = MDSS_MDP_BW_MODE_NONE;
-
-	BUG_ON(num_pipes > MAX_PIPES_PER_LM);
 
 	BUG_ON(num_pipes > MAX_PIPES_PER_LM);
 
@@ -799,8 +796,6 @@ static void mdss_mdp_perf_calc_mixer(struct mdss_mdp_mixer *mixer,
 
 	perf->bw_overlap += bw_overlap_max;
 	perf->prefill_bytes += prefill_bytes;
-
-	perf->bw_vote_mode = bw_vote_mode;
 
 	if (max_clk_rate > perf->mdp_clk_rate)
 		perf->mdp_clk_rate = max_clk_rate;
@@ -1375,8 +1370,7 @@ static void mdss_mdp_ctl_perf_update(struct mdss_mdp_ctl *ctl,
 		 * MDP.
 		 */
 		if ((params_changed && (new->bw_ctl > old->bw_ctl)) ||
-		    (!params_changed && (new->bw_ctl < old->bw_ctl)) ||
-		    (new->bw_vote_mode != MDSS_MDP_BW_MODE_NONE)) {
+		    (!params_changed && (new->bw_ctl < old->bw_ctl))) {
 			pr_debug("c=%d p=%d new_bw=%llu,old_bw=%llu mode=%d\n",
 				ctl->num, params_changed, new->bw_ctl,
 				old->bw_ctl, new->bw_vote_mode);

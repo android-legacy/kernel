@@ -65,58 +65,6 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev)
 	return rc;
 }
 
-static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
-{
-	int ret = 0;
-	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
-	int i = 0;
-
-	if (pdata == NULL) {
-		pr_err("%s: Invalid input data\n", __func__);
-		ret = -EINVAL;
-		goto end;
-	}
-
-	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
-				panel_data);
-
-	ret = mdss_dsi_panel_reset(pdata, 0);
-	if (ret) {
-		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
-		ret = 0;
-	}
-
-	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
-		pr_debug("reset disable: pinctrl not enabled\n");
-
-	if (ctrl_pdata->panel_bias_vreg) {
-		pr_debug("%s: Disabling panel bias vreg. ndx = %d\n",
-		       __func__, ctrl_pdata->ndx);
-		if (qpnp_ibb_enable(false))
-			pr_err("Unable to disable bias vreg\n");
-		/* Add delay recommended by panel specs */
-		udelay(2000);
-	}
-
-	for (i = DSI_MAX_PM - 1; i >= 0; i--) {
-		/*
-		 * Core power module will be disabled when the
-		 * clocks are disabled
-		 */
-		if (DSI_CORE_PM == i)
-			continue;
-		ret = msm_dss_enable_vreg(
-			ctrl_pdata->power_data[i].vreg_config,
-			ctrl_pdata->power_data[i].num_vreg, 0);
-		if (ret)
-			pr_err("%s: failed to disable vregs for %s\n",
-				__func__, __mdss_dsi_pm_name(i));
-	}
-
-end:
-	return ret;
-}
-
 #ifndef CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL
 static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 {
@@ -187,17 +135,9 @@ error:
 }
 #endif	/* CONFIG_FB_MSM_MDSS_SPECIFIC_PANEL */
 
-static int mdss_dsi_panel_power_doze(struct mdss_panel_data *pdata, int enable)
-{
-	/* Panel power control when entering/exiting doze mode */
-	return 0;
-}
-
 static int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 	int power_state)
 {
-	int ret;
-	struct mdss_panel_info *pinfo;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
 	if (pdata == NULL) {
@@ -1851,7 +1791,6 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	struct device_node *dsi_ctrl_np = NULL;
 	struct platform_device *ctrl_pdev = NULL;
 	struct mdss_panel_specific_pdata *spec_pdata = NULL;
-	bool dynamic_fps;
 	const char *data;
 	struct resource *res;
 

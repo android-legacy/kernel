@@ -752,6 +752,18 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 			mdss_mdp_mixer_pipe_unstage(pipe, pipe->mixer_left);
 			pipe->mixer_left = mixer;
 		}
+	}
+
+	if (left_blend_pipe) {
+		if (pipe->priority <= left_blend_pipe->priority) {
+			pr_debug("priority limitation. left:%d right%d\n",
+				left_blend_pipe->priority, pipe->priority);
+			ret = -EPERM;
+			goto exit_fail;
+		} else {
+			pr_debug("pipe%d is a right_pipe\n", pipe->num);
+			pipe->is_right_blend = true;
+		}
 	} else if (pipe->is_right_blend) {
 		/*
 		 * pipe used to be right blend need to update mixer
@@ -1223,8 +1235,6 @@ int mdss_mdp_overlay_start(struct msm_fb_data_type *mfd)
 			return 0;
 		}
 	}
-
-	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON);
 

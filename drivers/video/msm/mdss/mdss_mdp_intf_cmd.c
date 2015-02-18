@@ -170,9 +170,18 @@ static int mdss_mdp_cmd_tearcheck_cfg(struct mdss_mdp_ctl *ctl,
 			te->sync_threshold_start, te->sync_threshold_continue);
 	}
 
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT, height);
-	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_VSYNC_INIT_VAL,
+	pingpong_base = mixer->pingpong_base;
+	/* for dst split pp_num is cmd session (0 and 1) */
+	if (is_split_dst(ctl->mfd))
+		pingpong_base += ctx->pp_num * SPLIT_MIXER_OFFSET;
+
+	mdss_mdp_pingpong_write(pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
+	mdss_mdp_pingpong_write(pingpong_base,
+		MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT,
+		te ? te->sync_cfg_height : 0);
+	mdss_mdp_pingpong_write(pingpong_base,
+		MDSS_MDP_REG_PP_VSYNC_INIT_VAL,
 		te ? te->vsync_init_val : 0);
 	mdss_mdp_pingpong_write(pingpong_base,
 		MDSS_MDP_REG_PP_RD_PTR_IRQ,
@@ -1075,29 +1084,6 @@ static int mdss_mdp_cmd_intfs_setup(struct mdss_mdp_ctl *ctl,
 		}
 	}
 	ctx->ref_cnt++;
-
-	if (!ctl)
-		return -EINVAL;
-
-	ctx = (struct mdss_mdp_cmd_ctx *) ctl->priv_data;
-
-	sctl = mdss_mdp_get_split_ctl(ctl);
-	if (ctx && mdss_panel_is_power_on(ctx->panel_power_state)) {
-		pr_debug("%s: cmd_start with panel always on\n",
-			__func__);
-		/*
-		 * It is possible that the resume was called from the panel
-		 * always on state without MDSS every power-collapsed (such
-		 * as a case with any other interfaces connected). In such
-		 * cases, we need to explictly call the restore function to
-		 * enable tearcheck logic.
-		 */
-		mdss_mdp_cmd_restore(ctl);
-
-		/* Turn on the panel so that it can exit low power mode */
-		ret = mdss_mdp_cmd_panel_on(ctl, sctl);
-		goto end;
-	}
 
 	mixer = mdss_mdp_mixer_get(ctl, MDSS_MDP_MIXER_MUX_LEFT);
 	if (!mixer) {

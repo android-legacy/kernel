@@ -547,6 +547,8 @@ void mipi_dsi_panel_create_debugfs(struct msm_fb_data_type *mfd)
 	struct dentry *root;
 	struct mdss_panel_data *pdata;
 	struct platform_device *pdev;
+	struct device *ctrl_dev;
+	struct mdss_dsi_ctrl_pdata *ctrl;
 
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
@@ -568,8 +570,8 @@ void mipi_dsi_panel_create_debugfs(struct msm_fb_data_type *mfd)
 		return;
 	}
 
-	mdss_dsi_buf_alloc(&debug_tx_buf, ALIGN(DSI_BUF_SIZE, SZ_4K));
-	mdss_dsi_buf_alloc(&debug_rx_buf, ALIGN(DSI_BUF_SIZE, SZ_4K));
+	mdss_dsi_buf_alloc(ctrl_dev, &ctrl->tx_buf, SZ_4K);
+	mdss_dsi_buf_alloc(ctrl_dev, &ctrl->rx_buf, SZ_4K);
 
 	dev_info(dev, "%s: create folder %s\n", __func__,
 						kobject_name(&dev->kobj));
