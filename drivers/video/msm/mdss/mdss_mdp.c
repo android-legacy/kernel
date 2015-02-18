@@ -3030,14 +3030,8 @@ int mdss_mdp_secure_display_ctrl(unsigned int enable)
 	desc.args[0] = request.enable = enable;
 	desc.arginfo = SCM_ARGS(1);
 
-	if (!is_scm_armv8()) {
-		ret = scm_call(SCM_SVC_MP, MEM_PROTECT_SD_CTRL,
-			&request, sizeof(request), &resp, sizeof(resp));
-	} else {
-		ret = scm_call2(SCM_SIP_FNID(SCM_SVC_MP,
-				MEM_PROTECT_SD_CTRL_FLAT), &desc);
-		resp = desc.ret[0];
-	}
+	ret = scm_call(SCM_SVC_MP, MEM_PROTECT_SD_CTRL,
+		&request, sizeof(request), &resp, sizeof(resp));
 
 	pr_debug("scm_call MEM_PROTECT_SD_CTRL(%u): ret=%d, resp=%x",
 				enable, ret, resp);

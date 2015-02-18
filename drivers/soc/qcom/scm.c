@@ -633,3 +633,29 @@ int scm_get_feat_version(u32 feat)
 }
 EXPORT_SYMBOL(scm_get_feat_version);
 
+#define RESTORE_SEC_CFG    2
+int scm_restore_sec_cfg(u32 device_id, u32 spare, int *scm_ret)
+{
+	struct scm_desc desc = {0};
+	struct restore_sec_cfg {
+		u32 device_id;
+		u32 spare;
+	} cfg;
+
+	cfg.device_id = device_id;
+	cfg.spare = spare;
+
+	if (IS_ERR_OR_NULL(scm_ret))
+		return -EINVAL;
+
+	return scm_call(SCM_SVC_MP, RESTORE_SEC_CFG, &cfg, sizeof(cfg),
+				scm_ret, sizeof(*scm_ret));
+
+	desc.args[0] = device_id;
+	desc.args[1] = spare;
+	desc.arginfo = SCM_ARGS(2);
+
+	*scm_ret = desc.ret[0];
+	return 0;
+}
+EXPORT_SYMBOL(scm_restore_sec_cfg);

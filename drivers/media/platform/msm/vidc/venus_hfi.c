@@ -1314,20 +1314,10 @@ static inline int venus_hfi_tzbsp_set_video_state(enum tzbsp_video_state state)
 	struct tzbsp_video_set_state_req cmd = {0};
 	int tzbsp_rsp = 0;
 	int rc = 0;
-	struct scm_desc desc = {0};
-
-	desc.args[0] = cmd.state = state;
-	desc.args[1] = cmd.spare = 0;
-	desc.arginfo = SCM_ARGS(2);
-
-	if (!is_scm_armv8()) {
-		rc = scm_call(SCM_SVC_BOOT, TZBSP_VIDEO_SET_STATE, &cmd,
-				sizeof(cmd), &tzbsp_rsp, sizeof(tzbsp_rsp));
-	} else {
-		rc = scm_call2(SCM_SIP_FNID(SCM_SVC_BOOT,
-				TZBSP_VIDEO_SET_STATE), &desc);
-		tzbsp_rsp = desc.ret[0];
-	}
+	cmd.state = state;
+	cmd.spare = 0;
+	rc = scm_call(SCM_SVC_BOOT, TZBSP_VIDEO_SET_STATE, &cmd, sizeof(cmd),
+			&tzbsp_rsp, sizeof(tzbsp_rsp));
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed scm_call %d\n", rc);
 		return rc;
@@ -3844,15 +3834,9 @@ static int protect_cp_mem(struct venus_hfi_device *device)
 		}
 	}
 
-	if (!is_scm_armv8()) {
-		rc = scm_call(SCM_SVC_MP, TZBSP_MEM_PROTECT_VIDEO_VAR, &memprot,
+	rc = scm_call(SCM_SVC_MP, TZBSP_MEM_PROTECT_VIDEO_VAR, &memprot,
 			sizeof(memprot), &resp, sizeof(resp));
-	} else {
-		desc.arginfo = SCM_ARGS(4);
-		rc = scm_call2(SCM_SIP_FNID(SCM_SVC_MP,
-			       TZBSP_MEM_PROTECT_VIDEO_VAR), &desc);
-		resp = desc.ret[0];
-	}
+
 	if (rc)
 		dprintk(VIDC_ERR,
 		"Failed to protect memory , rc is :%d, response : %d\n",
